@@ -1,3 +1,5 @@
+import re
+
 from qgis.processing import alg
 from qgis.core import (
 	QgsField,
@@ -7,15 +9,24 @@ from qgis.PyQt.QtCore import QVariant
 
 # Nombre del campo de salida con la clasificacion de profundidad.
 CAMPO_CF_PROFUNDIDAD = "CF_Profundidad"
-# Candidatos para ubicar los campos en Colectores.
-REGISTRO_INICIAL_CANDIDATOS = ("Registro_Inicial",)
-REGISTRO_FINAL_CANDIDATOS = ("Registro_Final", "Registro_FInal")
-# Candidatos para ubicar el ID en Registros.
-ID_REGISTRO_CANDIDATOS = ("ID",)
-# Candidatos para ubicar el campo de profundidad en Registros.
-PROFUNDIDAD_CANDIDATOS = ("PROFUNDIDAD",)
-# Campo alternativo cuando PROFUNDIDAD venga nulo.
-PROFUNDIDAD_INSPECCIONADA_CANDIDATOS = ("Profundidad_Inspeccionada",)
+# Nombres por defecto de campos en Colectores.
+CAMPO_REGISTRO_INICIAL = "Registro_Inicial"
+CAMPO_REGISTRO_FINAL = "Registro_Final"
+# Nombres por defecto de campos en Registros.
+CAMPO_ID_REGISTRO = "ID"
+CAMPO_PROFUNDIDAD = "PROFUNDIDAD"
+CAMPO_PROFUNDIDAD_INSPECCIONADA = "Profundidad_Inspeccionada"
+# Limites de profundidad (metros) para clasificacion por defecto.
+RANGO_PROFUNDIDAD = (2.0, 3.0, 4.0, 5.0, 7.0)
+
+# Parametros configurables en el algoritmo.
+PARAM_CAMPO_CF_PROFUNDIDAD = "CAMPO_CF_PROFUNDIDAD"
+PARAM_CAMPO_REGISTRO_INICIAL = "CAMPO_REGISTRO_INICIAL"
+PARAM_CAMPO_REGISTRO_FINAL = "CAMPO_REGISTRO_FINAL"
+PARAM_CAMPO_ID_REGISTRO = "CAMPO_ID_REGISTRO"
+PARAM_CAMPO_PROFUNDIDAD = "CAMPO_PROFUNDIDAD"
+PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA = "CAMPO_PROFUNDIDAD_INSPECCIONADA"
+PARAM_RANGO_PROFUNDIDAD = "RANGO_PROFUNDIDAD"
 
 
 def _find_field_index(fields, candidates, partial_tokens=()):
@@ -65,21 +76,38 @@ def _to_float_or_none(value):
 		return None
 
 
-def _clasificar_profundidad(profundidad):
-	"""Clasifica segun tabla: <2=1, [2-3)=2, [3-4)=3, [4-5)=4, [5-7)=5, >=7=6."""
+def _parse_rango_profundidad(text, defaults):
+	"""Convierte el texto de rangos a una tupla de limites en metros."""
+	if text is None or not str(text).strip():
+		return tuple(defaults)
+
+	numbers = re.findall(r"[-+]?\d+(?:[\.,]\d+)?", str(text))
+	if not numbers:
+		return tuple(defaults)
+
+	limites = []
+	for num in numbers:
+		try:
+			valor = float(num.replace(",", "."))
+		except ValueError:
+			continue
+		if valor > 0:
+			limites.append(valor)
+
+	if not limites:
+		return tuple(defaults)
+
+	return tuple(sorted(set(limites)))
+
+
+def _clasificar_profundidad(profundidad, limites):
+	"""Clasifica segun limites configurables de profundidad."""
 	if profundidad is None:
 		return None
-	if profundidad < 2.0:
-		return 1
-	if profundidad < 3.0:
-		return 2
-	if profundidad < 4.0:
-		return 3
-	if profundidad < 5.0:
-		return 4
-	if profundidad < 7.0:
-		return 5
-	return 6
+	for idx, limite in enumerate(limites, start=1):
+		if profundidad < limite:
+			return idx
+	return len(limites) + 1
 
 
 @alg(name="cf_profundidad",
@@ -88,6 +116,48 @@ def _clasificar_profundidad(profundidad):
 	 group_label="Personalizados")
 @alg.input(type=alg.VECTOR_LAYER, name="COLECTORES", label="Capa Colectores")
 @alg.input(type=alg.SOURCE, name="REGISTROS", label="Capa Registros")
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_CF_PROFUNDIDAD,
+	label="Nombre campo salida (CF Profundidad)",
+	default=CAMPO_CF_PROFUNDIDAD,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_REGISTRO_INICIAL,
+	label="Nombre campo Registro Inicial en Colectores",
+	default=CAMPO_REGISTRO_INICIAL,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_REGISTRO_FINAL,
+	label="Nombre campo Registro Final en Colectores",
+	default=CAMPO_REGISTRO_FINAL,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_ID_REGISTRO,
+	label="Nombre campo ID en Registros",
+	default=CAMPO_ID_REGISTRO,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_PROFUNDIDAD,
+	label="Nombre campo Profundidad en Registros",
+	default=CAMPO_PROFUNDIDAD,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
+	label="Nombre campo Profundidad Inspeccionada en Registros",
+	default=CAMPO_PROFUNDIDAD_INSPECCIONADA,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_RANGO_PROFUNDIDAD,
+	label="Rango Profundidad (limites en metros, separados por coma)",
+	default=", ".join(str(v) for v in RANGO_PROFUNDIDAD),
+)
 @alg.output(type=alg.NUMBER, name="ACTUALIZADAS", label="Cantidad de colectores actualizados")
 def cf_profundidad(instance, parameters, context, feedback, inputs):
 	"""Clasifica colectores por profundidad maxima de sus registros asociados."""
@@ -100,74 +170,147 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 	if registros_source is None:
 		raise QgsProcessingException("No se pudo leer la capa Registros.")
 
+	campo_cf_profundidad = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_CF_PROFUNDIDAD,
+		context,
+	)
+	campo_cf_profundidad = campo_cf_profundidad.strip() if campo_cf_profundidad is not None else ""
+	if not campo_cf_profundidad:
+		campo_cf_profundidad = CAMPO_CF_PROFUNDIDAD
+
+	campo_registro_inicial = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_REGISTRO_INICIAL,
+		context,
+	)
+	campo_registro_inicial = campo_registro_inicial.strip() if campo_registro_inicial is not None else ""
+	if not campo_registro_inicial:
+		campo_registro_inicial = CAMPO_REGISTRO_INICIAL
+
+	campo_registro_final = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_REGISTRO_FINAL,
+		context,
+	)
+	campo_registro_final = campo_registro_final.strip() if campo_registro_final is not None else ""
+	if not campo_registro_final:
+		campo_registro_final = CAMPO_REGISTRO_FINAL
+
+	campo_id_registro = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_ID_REGISTRO,
+		context,
+	)
+	campo_id_registro = campo_id_registro.strip() if campo_id_registro is not None else ""
+	if not campo_id_registro:
+		campo_id_registro = CAMPO_ID_REGISTRO
+
+	campo_profundidad = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_PROFUNDIDAD,
+		context,
+	)
+	campo_profundidad = campo_profundidad.strip() if campo_profundidad is not None else ""
+	if not campo_profundidad:
+		campo_profundidad = CAMPO_PROFUNDIDAD
+
+	campo_profundidad_inspeccionada = instance.parameterAsString(
+		parameters,
+		PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
+		context,
+	)
+	campo_profundidad_inspeccionada = campo_profundidad_inspeccionada.strip() if campo_profundidad_inspeccionada is not None else ""
+	if not campo_profundidad_inspeccionada:
+		campo_profundidad_inspeccionada = CAMPO_PROFUNDIDAD_INSPECCIONADA
+
+	texto_rango_profundidad = instance.parameterAsString(
+		parameters,
+		PARAM_RANGO_PROFUNDIDAD,
+		context,
+	)
+	rango_profundidad_cfg = _parse_rango_profundidad(texto_rango_profundidad, RANGO_PROFUNDIDAD)
+
 	colectores_fields = capa_colectores.fields()
 	registros_fields = registros_source.fields()
 
 	# Busca campos en Colectores.
-	idx_reg_ini = _find_field_index(colectores_fields, REGISTRO_INICIAL_CANDIDATOS)
-	idx_reg_fin = _find_field_index(colectores_fields, REGISTRO_FINAL_CANDIDATOS)
+	idx_reg_ini = _find_field_index(
+		colectores_fields,
+		(campo_registro_inicial,),
+		partial_tokens=("registro", "inicial"),
+	)
+	idx_reg_fin = _find_field_index(
+		colectores_fields,
+		(campo_registro_final,),
+		partial_tokens=("registro", "final"),
+	)
 
 	if idx_reg_ini == -1:
 		raise QgsProcessingException(
-			"No se encontro el campo Registro_Inicial en Colectores."
+			f"No se encontro el campo '{campo_registro_inicial}' en Colectores."
 		)
 	if idx_reg_fin == -1:
 		raise QgsProcessingException(
-			"No se encontro el campo Registro_Final en Colectores."
+			f"No se encontro el campo '{campo_registro_final}' en Colectores."
 		)
 
 	# Busca campos en Registros.
-	idx_id_reg = _find_field_index(registros_fields, ID_REGISTRO_CANDIDATOS)
-	idx_prof_reg = _find_field_index(registros_fields, PROFUNDIDAD_CANDIDATOS, partial_tokens=("prof",))
+	idx_id_reg = _find_field_index(
+		registros_fields,
+		(campo_id_registro,),
+		partial_tokens=("id",),
+	)
+	idx_prof_reg = _find_field_index(
+		registros_fields,
+		(campo_profundidad,),
+		partial_tokens=("profundidad", "prof"),
+	)
 	idx_prof_inspec = _find_field_index(
 		registros_fields,
-		PROFUNDIDAD_INSPECCIONADA_CANDIDATOS,
-		partial_tokens=("inspe",),
+		(campo_profundidad_inspeccionada,),
+		partial_tokens=("inspeccion",),
 	)
 
 	if idx_id_reg == -1:
 		raise QgsProcessingException(
-			"No se encontro el campo ID en Registros."
+			f"No se encontro el campo '{campo_id_registro}' en Registros."
 		)
 	if idx_prof_reg == -1:
 		raise QgsProcessingException(
-			"No se encontro un campo de profundidad en Registros (ej: Profundidad)."
+			f"No se encontro el campo '{campo_profundidad}' en Registros."
 		)
 
-	# Construye mapa ID -> Profundidad desde la capa Registros.
-	mapa_profundidad = {}
-	registros_list = list(registros_source.getFeatures())
-	for i, registro in enumerate(registros_list, start=1):
-		if feedback.isCanceled():
-			break
+	feedback.pushInfo(f"Campo salida CF Profundidad: {campo_cf_profundidad}")
+	feedback.pushInfo(f"Registro Inicial en Colectores: {campo_registro_inicial}")
+	feedback.pushInfo(f"Registro Final en Colectores: {campo_registro_final}")
+	feedback.pushInfo(f"ID en Registros: {campo_id_registro}")
+	feedback.pushInfo(f"Profundidad en Registros: {campo_profundidad}")
+	feedback.pushInfo(f"Profundidad Inspeccionada en Registros: {campo_profundidad_inspeccionada}")
+	feedback.pushInfo(
+		"Rango Profundidad configurado (m): "
+		+ ", ".join(
+			str(int(v)) if float(v).is_integer() else str(v)
+			for v in rango_profundidad_cfg
+		)
+	)
 
-		reg_id = _normalize_value(registro[idx_id_reg])
-		reg_prof = _to_float_or_none(registro[idx_prof_reg])
-		if reg_prof is None and idx_prof_inspec != -1:
-			reg_prof = _to_float_or_none(registro[idx_prof_inspec])
-
-		if reg_id and reg_prof is not None and reg_id not in mapa_profundidad:
-			mapa_profundidad[reg_id] = reg_prof
-
-		if registros_list:
-			feedback.setProgress(25.0 * i / len(registros_list))
-
-	# Crea campo de salida si aun no existe.
-	idx_cf_profundidad = colectores_fields.lookupField(CAMPO_CF_PROFUNDIDAD)
+	# Crea campo de salida si aun no exista.
+	idx_cf_profundidad = colectores_fields.lookupField(campo_cf_profundidad)
 	if idx_cf_profundidad == -1:
 		ok = capa_colectores.dataProvider().addAttributes(
-			[QgsField(CAMPO_CF_PROFUNDIDAD, QVariant.Int, len=10, prec=0)]
+			[QgsField(campo_cf_profundidad, QVariant.Int, len=10, prec=0)]
 		)
 		if not ok:
 			raise QgsProcessingException(
-				f"No se pudo crear el campo {CAMPO_CF_PROFUNDIDAD} en Colectores."
+				f"No se pudo crear el campo {campo_cf_profundidad} en Colectores."
 			)
 
 		capa_colectores.updateFields()
-		idx_cf_profundidad = capa_colectores.fields().lookupField(CAMPO_CF_PROFUNDIDAD)
+		idx_cf_profundidad = capa_colectores.fields().lookupField(campo_cf_profundidad)
 		if idx_cf_profundidad == -1:
 			raise QgsProcessingException(
-				f"El campo {CAMPO_CF_PROFUNDIDAD} no quedo disponible."
+				f"El campo {campo_cf_profundidad} no quedo disponible."
 			)
 
 	inicio_edicion = False
@@ -210,7 +353,7 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 			elif prof_fin is not None:
 				profundidad_maxima = prof_fin
 
-			nueva_clase = _clasificar_profundidad(profundidad_maxima)
+			nueva_clase = _clasificar_profundidad(profundidad_maxima, rango_profundidad_cfg)
 
 			valor_actual = colector[idx_cf_profundidad]
 			if valor_actual != nueva_clase:
