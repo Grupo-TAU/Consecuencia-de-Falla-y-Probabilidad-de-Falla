@@ -149,8 +149,9 @@ def _clasificar_profundidad(profundidad, limites):
 @alg.input(
 	type=alg.STRING,
 	name=PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
-	label="Nombre campo Profundidad Inspeccionada en Registros",
+	label="Nombre campo Profundidad Inspeccionada en Registros (opcional)",
 	default=CAMPO_PROFUNDIDAD_INSPECCIONADA,
+	optional=True,
 )
 @alg.input(
 	type=alg.STRING,
@@ -220,9 +221,12 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 		PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
 		context,
 	)
-	campo_profundidad_inspeccionada = campo_profundidad_inspeccionada.strip() if campo_profundidad_inspeccionada is not None else ""
-	if not campo_profundidad_inspeccionada:
-		campo_profundidad_inspeccionada = CAMPO_PROFUNDIDAD_INSPECCIONADA
+	if campo_profundidad_inspeccionada is not None:
+		campo_profundidad_inspeccionada = campo_profundidad_inspeccionada.strip()
+		if not campo_profundidad_inspeccionada:
+			campo_profundidad_inspeccionada = CAMPO_PROFUNDIDAD_INSPECCIONADA
+	else:
+		campo_profundidad_inspeccionada = None
 
 	texto_rango_profundidad = instance.parameterAsString(
 		parameters,
@@ -266,11 +270,13 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 		(campo_profundidad,),
 		partial_tokens=("profundidad", "prof"),
 	)
-	idx_prof_inspec = _find_field_index(
-		registros_fields,
-		(campo_profundidad_inspeccionada,),
-		partial_tokens=("inspeccion",),
-	)
+	idx_prof_inspec = -1
+	if campo_profundidad_inspeccionada is not None:
+		idx_prof_inspec = _find_field_index(
+			registros_fields,
+			(campo_profundidad_inspeccionada,),
+			partial_tokens=("inspeccion",),
+		)
 
 	if idx_id_reg == -1:
 		raise QgsProcessingException(
@@ -281,12 +287,18 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 			f"No se encontro el campo '{campo_profundidad}' en Registros."
 		)
 
+	# El campo de profundidad inspeccionada es opcional
+	usa_profundidad_inspeccionada = idx_prof_inspec != -1
+
 	feedback.pushInfo(f"Campo salida CF Profundidad: {campo_cf_profundidad}")
 	feedback.pushInfo(f"Registro Inicial en Colectores: {campo_registro_inicial}")
 	feedback.pushInfo(f"Registro Final en Colectores: {campo_registro_final}")
 	feedback.pushInfo(f"ID en Registros: {campo_id_registro}")
 	feedback.pushInfo(f"Profundidad en Registros: {campo_profundidad}")
-	feedback.pushInfo(f"Profundidad Inspeccionada en Registros: {campo_profundidad_inspeccionada}")
+	if usa_profundidad_inspeccionada:
+		feedback.pushInfo(f"Profundidad Inspeccionada en Registros: {campo_profundidad_inspeccionada}")
+	else:
+		feedback.pushInfo("Campo Profundidad Inspeccionada no especificado - se usara solo Profundidad")
 	feedback.pushInfo(
 		"Rango Profundidad configurado (m): "
 		+ ", ".join(
@@ -294,6 +306,25 @@ def cf_profundidad(instance, parameters, context, feedback, inputs):
 			for v in rango_profundidad_cfg
 		)
 	)
+
+	# Construye mapa de profundidades por ID de registro
+	mapa_profundidad = {}
+	for registro in registros_source.getFeatures():
+		reg_id = _normalize_value(registro[idx_id_reg])
+		if not reg_id:
+			continue
+
+		profundidad = _to_float_or_none(registro[idx_prof_reg])
+		if usa_profundidad_inspeccionada:
+			prof_inspec = _to_float_or_none(registro[idx_prof_inspec])
+			if prof_inspec is not None:
+				if profundidad is not None:
+					profundidad = max(profundidad, prof_inspec)
+				else:
+					profundidad = prof_inspec
+
+		if profundidad is not None:
+			mapa_profundidad[reg_id] = profundidad
 
 	# Crea campo de salida si aun no exista.
 	idx_cf_profundidad = colectores_fields.lookupField(campo_cf_profundidad)
