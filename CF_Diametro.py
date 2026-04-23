@@ -20,11 +20,23 @@ PARAM_CAMPO_DIAMETRO = "CAMPO_DIAMETRO"
 PARAM_RANGO_DIAMETRO = "RANGO_DIAMETRO"
 
 
-def _find_field_index(fields, field_name):
-	"""Busca un campo por nombre exacto (sin candidatos)."""
+def _find_field_index(fields, candidates, partial_tokens=()):
+	"""Busca un campo por lista de candidatos exactos o coincidencia parcial."""
 	nombres = [fields.at(i).name() for i in range(fields.count())]
 	lower_to_index = {name.lower(): i for i, name in enumerate(nombres)}
-	return lower_to_index.get(str(field_name).strip().lower(), -1)
+
+	for candidate in candidates:
+		idx = lower_to_index.get(str(candidate).lower())
+		if idx is not None:
+			return idx
+
+	if partial_tokens:
+		for i, name in enumerate(nombres):
+			lower_name = name.lower()
+			if any(token in lower_name for token in partial_tokens):
+				return i
+
+	return -1
 
 
 def _to_mm_or_none(value):
@@ -167,7 +179,7 @@ def cf_diametro(instance, parameters, context, feedback, inputs):
 
 	fields = capa_colectores.fields()
 
-	idx_diametro = _find_field_index(fields, campo_diametro)
+	idx_diametro = _find_field_index(fields, (campo_diametro,), partial_tokens=("diametro", "diam"))
 	if idx_diametro == -1:
 		raise QgsProcessingException(
 			f"No se encontro el campo de diametro '{campo_diametro}' en Colectores."
@@ -182,12 +194,18 @@ def cf_diametro(instance, parameters, context, feedback, inputs):
 	feedback.pushInfo(
 		f"Campo de salida configurado: {campo_cf_diametro}"
 	)
+	# Construye descripcion de rangos
+	clases_descripcion = []
+	for i in range(len(rango_diametro_cfg) + 1):
+		if i == 0:
+			clases_descripcion.append(f"Clase {i+1}: < {rango_diametro_cfg[0]:.1f} mm")
+		elif i < len(rango_diametro_cfg):
+			clases_descripcion.append(f"Clase {i+1}: {rango_diametro_cfg[i-1]:.1f} - {rango_diametro_cfg[i]:.1f} mm")
+		else:
+			clases_descripcion.append(f"Clase {i+1}: >= {rango_diametro_cfg[-1]:.1f} mm")
+
 	feedback.pushInfo(
-		"Rango_Diametro configurado (mm): "
-		+ ", ".join(
-			str(int(v)) if float(v).is_integer() else str(v)
-			for v in rango_diametro_cfg
-		)
+		"Rango_Diametro configurado (mm): " + ", ".join(clases_descripcion)
 	)
 
 	# Crea campo de salida si aun no existe.

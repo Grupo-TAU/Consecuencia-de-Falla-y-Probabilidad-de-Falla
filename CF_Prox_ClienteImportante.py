@@ -1,3 +1,5 @@
+import re
+
 from qgis.processing import alg
 from qgis.core import (
     QgsCoordinateTransform,
@@ -21,13 +23,107 @@ RANGOS_BUFFER = [
     (6100.0, 2),
 ]
 
+# Parametros configurables en el algoritmo.
+PARAM_CAMPO_CLASIFICACION = "CAMPO_CLASIFICACION"
+PARAM_RANGOS_BUFFER = "RANGOS_BUFFER"
+
+
+def _to_float_or_none(value):
+	"""Convierte el valor a float, tolerando diferentes formatos."""
+	if value is None:
+		return None
+
+	if isinstance(value, (int, float)):
+		return float(value)
+
+	text = str(value).strip()
+	if not text:
+		return None
+
+	text = text.replace(",", ".")
+
+	try:
+		return float(text)
+	except ValueError:
+		return None
+
+
+def _parse_rangos_buffer(text, defaults):
+	"""Convierte texto de rangos a lista de tuplas (distancia, clase).
+	
+	Formato esperado: "300:6, 1500:5, 3000:4, 4500:3, 6100:2"
+	o simplemente números: "300, 1500, 3000, 4500, 6100"
+	"""
+	if text is None or not str(text).strip():
+		return list(defaults)
+
+	# Busca patrones de "numero:numero" o solo "numero"
+	rangos = []
+	elementos = str(text).split(',')
+	
+	for elemento in elementos:
+		elemento = elemento.strip()
+		if not elemento:
+			continue
+
+		# Intenta parsear formato "distancia:clase"
+		if ':' in elemento:
+			partes = elemento.split(':')
+			if len(partes) == 2:
+				try:
+					distancia = float(partes[0].replace(",", ".").strip())
+					clase = int(partes[1].strip())
+					if distancia > 0 and clase > 0:
+						rangos.append((distancia, clase))
+				except (ValueError, IndexError):
+					continue
+		else:
+			# Si no tiene ":", interpretamos como distancia con clase asignada automáticamente
+			try:
+				distancia = float(elemento.replace(",", ".").strip())
+				if distancia > 0:
+					# La clase se asignará automáticamente al ordenar después
+					rangos.append(distancia)
+			except ValueError:
+				continue
+
+	if not rangos:
+		return list(defaults)
+
+	# Si solo tenemos distancias, asignamos clases descendentes
+	resultado = []
+	if all(isinstance(r, tuple) for r in rangos):
+		# Ya tenemos pares (distancia, clase)
+		resultado = rangos
+	else:
+		# Tenemos solo distancias, asignamos clases descendentes
+		distancias_sorted = sorted(set(r for r in rangos if isinstance(r, float)))
+		num_rangos = len(distancias_sorted)
+		for idx, dist in enumerate(distancias_sorted):
+			clase = num_rangos - idx
+			resultado.append((dist, clase))
+
+	return sorted(resultado, key=lambda x: x[0])
+
 
 @alg(name="CF_Prox_ClienteImportante",
      label="CF Prox Cliente Importantes",
      group="personalizados",
      group_label="Personalizados")
-@alg.input(type=alg.VECTOR_LAYER, name="COLECTORES", label="Colectores")
-@alg.input(type=alg.SOURCE, name="CLIENTES_IMPORTANTES", label="Clientes importantes")
+@alg.input(type=alg.VECTOR_LAYER, name="COLECTORES", label="Capa Colectores")
+@alg.input(type=alg.SOURCE, name="CLIENTES_IMPORTANTES", label="Capa Clientes Importantes")
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_CAMPO_CLASIFICACION,
+	label="Nombre campo salida (Clasificación)",
+	default=CAMPO_CLASIFICACION,
+)
+@alg.input(
+	type=alg.STRING,
+	name=PARAM_RANGOS_BUFFER,
+	label="Rangos de buffer (distancia:clase, ej: 300:6, 1500:5, 3000:4, 4500:3, 6100:2)",
+	default=", ".join(f"{d}:{c}" for d, c in RANGOS_BUFFER),
+)
 @alg.output(type=alg.NUMBER, name="ACTUALIZADAS", label="Cantidad de colectores actualizados")
 def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
     """Clasifica colectores por cercania a clientes importantes con buffers crecientes."""
@@ -36,24 +132,43 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
     capa_lineas = instance.parameterAsVectorLayer(parameters, "COLECTORES", context)
     capa_puntos = instance.parameterAsSource(parameters, "CLIENTES_IMPORTANTES", context)
 
-    # Validamos que ambas entradas se hayan cargado correctamente.
     if capa_lineas is None:
         raise QgsProcessingException("No se pudo leer la capa Colectores.")
     if capa_puntos is None:
         raise QgsProcessingException("No se pudo leer la capa Clientes importantes.")
 
+    # Lee los parámetros configurables
+    campo_clasificacion = instance.parameterAsString(
+        parameters,
+        PARAM_CAMPO_CLASIFICACION,
+        context,
+    )
+    campo_clasificacion = campo_clasificacion.strip() if campo_clasificacion is not None else ""
+    if not campo_clasificacion:
+        campo_clasificacion = CAMPO_CLASIFICACION
+
+    texto_rangos_buffer = instance.parameterAsString(
+        parameters,
+        PARAM_RANGOS_BUFFER,
+        context,
+    )
+    rangos_buffer = _parse_rangos_buffer(texto_rangos_buffer, RANGOS_BUFFER)
+
+    feedback.pushInfo(f"Campo clasificación: {campo_clasificacion}")
+    feedback.pushInfo(f"Rangos buffer configurados: {rangos_buffer}")
+
     # Buscamos el campo de salida; si no existe, lo creamos como entero.
-    idx_clasificacion = capa_lineas.fields().lookupField(CAMPO_CLASIFICACION)
+    idx_clasificacion = capa_lineas.fields().lookupField(campo_clasificacion)
     if idx_clasificacion == -1:
         ok_campo = capa_lineas.dataProvider().addAttributes(
-            [QgsField(CAMPO_CLASIFICACION, QVariant.Int)]
+            [QgsField(campo_clasificacion, QVariant.Int)]
         )
         if not ok_campo:
             raise QgsProcessingException(
-                f"No se pudo crear el campo {CAMPO_CLASIFICACION} en Colectores."
+                f"No se pudo crear el campo {campo_clasificacion} en Colectores."
             )
         capa_lineas.updateFields()
-        idx_clasificacion = capa_lineas.fields().lookupField(CAMPO_CLASIFICACION)
+        idx_clasificacion = capa_lineas.fields().lookupField(campo_clasificacion)
 
     # Iniciamos edicion solo si la capa no estaba en modo edicion.
     inicio_edicion = False
@@ -131,7 +246,7 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
 
             if geom_linea is not None and not geom_linea.isEmpty():
                 # Fuerza el orden por distancia ascendente, aunque la lista se edite en otro orden.
-                for distancia, clase in sorted(RANGOS_BUFFER, key=lambda item: item[0]):
+                for distancia, clase in sorted(rangos_buffer, key=lambda item: item[0]):
                     # Generamos buffer del colector y filtramos puntos por bounding box.
                     buffer_geom = geom_linea.buffer(distancia, 8)
                     candidatos = index_puntos.intersects(buffer_geom.boundingBox())
@@ -158,7 +273,7 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
                 )
                 if not ok_update:
                     raise QgsProcessingException(
-                        f"No se pudo actualizar {CAMPO_CLASIFICACION} en FID {linea.id()}."
+                        f"No se pudo actualizar {campo_clasificacion} en FID {linea.id()}."
                     )
                 actualizadas += 1
 
