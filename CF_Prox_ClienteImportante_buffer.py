@@ -16,14 +16,15 @@ from qgis.core import (
 )
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import QVariant
+import re
 
 # Nombre del campo donde guardamos la clasificacion final.
-CAMPO_CLASIFICACION = "CF_Prox_ClienteImportante"
-CAMPO_BUFFER_DISTANCIA = "distancia_m"
-CAMPO_BUFFER_CLASE = "clase_cf"
+CAMPO_CLASIFICACION_DEFAULT = "CF_Prox_ClienteImportante"
+CAMPO_BUFFER_DISTANCIA_DEFAULT = "distancia_m"
+CAMPO_BUFFER_CLASE_DEFAULT = "clase_cf"
 # Umbrales de distancia (en unidades del CRS) y clase asignada.
 # Se evalua de menor a mayor distancia para conservar la clase mas alta posible.
-RANGOS_BUFFER = [
+RANGOS_BUFFER_DEFAULT = [
     (300.0, 6),
     (1500.0, 5),
     (3000.0, 4),
@@ -38,18 +39,51 @@ PALETA_VERDES = {
     6100.0: "#c7e9c0",
 }
 
+# Parametros configurables
+PARAM_CAMPO_CLASIFICACION = "CAMPO_CLASIFICACION"
+PARAM_CAMPO_BUFFER_DISTANCIA = "CAMPO_BUFFER_DISTANCIA"
+PARAM_CAMPO_BUFFER_CLASE = "CAMPO_BUFFER_CLASE"
+PARAM_RANGOS_BUFFER = "RANGOS_BUFFER"
+
+def _parse_rangos_buffer(text, defaults):
+    """Convierte el texto de rangos a una lista de tuplas (distancia, clase)."""
+    if text is None or not str(text).strip():
+        return defaults
+
+    rangos = []
+    pairs = str(text).split(',')
+    for pair in pairs:
+        pair = pair.strip()
+        if ':' in pair:
+            dist_str, clase_str = pair.split(':', 1)
+            try:
+                dist = float(dist_str.strip())
+                clase = int(clase_str.strip())
+                rangos.append((dist, clase))
+            except ValueError:
+                continue
+    if not rangos:
+        return defaults
+    return rangos
+
 
 class _PostProcesoBuffersVerdes(QgsProcessingLayerPostProcessorInterface):
     """Aplica simbologia categorizada por distancia con una secuencia de verdes."""
 
     _instancia = None
+    _campo_distancia = CAMPO_BUFFER_DISTANCIA_DEFAULT
+
+    def __init__(self, campo_distancia=None):
+        super().__init__()
+        if campo_distancia:
+            self._campo_distancia = campo_distancia
 
     def postProcessLayer(self, layer, context, feedback):
         if layer is None:
             return
 
         categorias = []
-        for distancia, _ in sorted(RANGOS_BUFFER, key=lambda item: item[0]):
+        for distancia, _ in sorted(RANGOS_BUFFER_DEFAULT, key=lambda item: item[0]):
             simbolo = QgsSymbol.defaultSymbol(layer.geometryType())
             if simbolo is None:
                 continue
@@ -61,13 +95,13 @@ class _PostProcesoBuffersVerdes(QgsProcessingLayerPostProcessorInterface):
             )
 
         if categorias:
-            renderer = QgsCategorizedSymbolRenderer(CAMPO_BUFFER_DISTANCIA, categorias)
+            renderer = QgsCategorizedSymbolRenderer(self._campo_distancia, categorias)
             layer.setRenderer(renderer)
             layer.triggerRepaint()
 
     @staticmethod
-    def create():
-        _PostProcesoBuffersVerdes._instancia = _PostProcesoBuffersVerdes()
+    def create(campo_distancia=None):
+        _PostProcesoBuffersVerdes._instancia = _PostProcesoBuffersVerdes(campo_distancia)
         return _PostProcesoBuffersVerdes._instancia
 
 
@@ -77,10 +111,52 @@ class _PostProcesoBuffersVerdes(QgsProcessingLayerPostProcessorInterface):
      group_label="Personalizados")
 @alg.input(type=alg.VECTOR_LAYER, name="COLECTORES", label="Colectores")
 @alg.input(type=alg.SOURCE, name="CLIENTES_IMPORTANTES", label="Clientes importantes")
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_CAMPO_CLASIFICACION,
+    label="Nombre campo salida (CF proximidad cliente importante)",
+    default=CAMPO_CLASIFICACION_DEFAULT,
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_CAMPO_BUFFER_DISTANCIA,
+    label="Nombre campo distancia en buffers",
+    default=CAMPO_BUFFER_DISTANCIA_DEFAULT,
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_CAMPO_BUFFER_CLASE,
+    label="Nombre campo clase en buffers",
+    default=CAMPO_BUFFER_CLASE_DEFAULT,
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_RANGOS_BUFFER,
+    label="Rangos buffer (distancia:clase, separados por coma)",
+    default=", ".join(f"{int(d)}:{c}" for d, c in RANGOS_BUFFER_DEFAULT),
+)
 @alg.input(type=alg.VECTOR_LAYER_DEST, name="BUFFERS_VISIBLES", label="Buffers visibles (nuevas intersecciones globales)")
 @alg.output(type=alg.NUMBER, name="ACTUALIZADAS", label="Cantidad de colectores actualizados")
 def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
     """Clasifica colectores por cercania a clientes importantes con buffers crecientes."""
+
+    # Obtener parametros configurables
+    campo_clasificacion = instance.parameterAsString(parameters, PARAM_CAMPO_CLASIFICACION, context)
+    campo_clasificacion = campo_clasificacion.strip() if campo_clasificacion else CAMPO_CLASIFICACION_DEFAULT
+
+    campo_buffer_distancia = instance.parameterAsString(parameters, PARAM_CAMPO_BUFFER_DISTANCIA, context)
+    campo_buffer_distancia = campo_buffer_distancia.strip() if campo_buffer_distancia else CAMPO_BUFFER_DISTANCIA_DEFAULT
+
+    campo_buffer_clase = instance.parameterAsString(parameters, PARAM_CAMPO_BUFFER_CLASE, context)
+    campo_buffer_clase = campo_buffer_clase.strip() if campo_buffer_clase else CAMPO_BUFFER_CLASE_DEFAULT
+
+    rangos_str = instance.parameterAsString(parameters, PARAM_RANGOS_BUFFER, context)
+    rangos_buffer = _parse_rangos_buffer(rangos_str, RANGOS_BUFFER_DEFAULT)
+
+    feedback.pushInfo(f"Campo clasificacion configurado: {campo_clasificacion}")
+    feedback.pushInfo(f"Campo buffer distancia: {campo_buffer_distancia}")
+    feedback.pushInfo(f"Campo buffer clase: {campo_buffer_clase}")
+    feedback.pushInfo(f"Rangos buffer configurados: {', '.join(f'{int(d)}:{c}' for d, c in rangos_buffer)}")
 
     # Leemos la capa editable de colectores y la fuente de clientes importantes.
     capa_lineas = instance.parameterAsVectorLayer(parameters, "COLECTORES", context)
@@ -94,8 +170,8 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
 
     # Capa de salida para visualizar solo buffers que agregan intersecciones globales.
     campos_buffers = QgsFields()
-    campos_buffers.append(QgsField(CAMPO_BUFFER_DISTANCIA, QVariant.Double, len=12, prec=2))
-    campos_buffers.append(QgsField(CAMPO_BUFFER_CLASE, QVariant.Int))
+    campos_buffers.append(QgsField(campo_buffer_distancia, QVariant.Double, len=12, prec=2))
+    campos_buffers.append(QgsField(campo_buffer_clase, QVariant.Int))
     sink_buffers, sink_buffers_id = instance.parameterAsSink(
         parameters,
         "BUFFERS_VISIBLES",
@@ -109,20 +185,20 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
 
     if context.willLoadLayerOnCompletion(sink_buffers_id):
         detalles_carga = context.layerToLoadOnCompletionDetails(sink_buffers_id)
-        detalles_carga.setPostProcessor(_PostProcesoBuffersVerdes.create())
+        detalles_carga.setPostProcessor(_PostProcesoBuffersVerdes.create(campo_buffer_distancia))
 
     # Buscamos el campo de salida; si no existe, lo creamos como entero.
-    idx_clasificacion = capa_lineas.fields().lookupField(CAMPO_CLASIFICACION)
+    idx_clasificacion = capa_lineas.fields().lookupField(campo_clasificacion)
     if idx_clasificacion == -1:
         ok_campo = capa_lineas.dataProvider().addAttributes(
-            [QgsField(CAMPO_CLASIFICACION, QVariant.Int)]
+            [QgsField(campo_clasificacion, QVariant.Int)]
         )
         if not ok_campo:
             raise QgsProcessingException(
-                f"No se pudo crear el campo {CAMPO_CLASIFICACION} en Colectores."
+                f"No se pudo crear el campo {campo_clasificacion} en Colectores."
             )
         capa_lineas.updateFields()
-        idx_clasificacion = capa_lineas.fields().lookupField(CAMPO_CLASIFICACION)
+        idx_clasificacion = capa_lineas.fields().lookupField(campo_clasificacion)
 
     # Iniciamos edicion solo si la capa no estaba en modo edicion.
     inicio_edicion = False
@@ -182,7 +258,7 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
     # Guarda la primera clase asignada por distancia global (300, luego 1500, etc.).
     clasificacion_por_fid = {}
 
-    rangos_ordenados = sorted(RANGOS_BUFFER, key=lambda item: item[0])
+    rangos_ordenados = sorted(rangos_buffer, key=lambda item: item[0])
 
     # Prepara geometria de clientes importantes (en CRS de colectores) para reutilizarla.
     puntos_geom = []
@@ -270,7 +346,7 @@ def cf_prox_clienteimportante(instance, parameters, context, feedback, inputs):
                 )
                 if not ok_update:
                     raise QgsProcessingException(
-                        f"No se pudo actualizar {CAMPO_CLASIFICACION} en FID {linea.id()}."
+                        f"No se pudo actualizar {campo_clasificacion} en FID {linea.id()}."
                     )
                 actualizadas += 1
 
