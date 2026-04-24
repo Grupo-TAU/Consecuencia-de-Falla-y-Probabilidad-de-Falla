@@ -4,22 +4,119 @@ from qgis.core import (
     QgsProcessingException,
 )
 from qgis.PyQt.QtCore import QVariant
+import re
 
 # Nombres comunes para detectar automaticamente el campo de pendiente.
-PENDIENTE_CANDIDATOS = ('Pendiente', 'pendiente', 'Slope', 'slope')
-REGISTRO_INICIAL_CANDIDATOS = ('Registro_Inicial',)
-REGISTRO_FINAL_CANDIDATOS = ('Registro_Final', 'Registro_FInal')
-CAMPO_POS_REL = 'posicionRelativas'
-CAMPO_POS_REL_CLAS = 'CF_PosicionRelativa'
+PENDIENTE_CANDIDATOS_DEFAULT = ('Pendiente',)
+REGISTRO_INICIAL_CANDIDATOS_DEFAULT = ('Registro_Inicial',)
+REGISTRO_FINAL_CANDIDATOS_DEFAULT = ('Registro_Final',)
+CAMPO_POS_REL_DEFAULT = 'posicionRelativa'
+CAMPO_POS_REL_CLAS_DEFAULT = 'CF_PosicionRelativa'
+# Limites de posicion relativa para clasificacion por defecto.
+RANGO_POS_REL_DEFAULT = (10.0, 30.0, 70.0, 120.0, 150.0)
+
+# Parametros configurables en el algoritmo.
+PARAM_PENDIENTE = "PENDIENTE"
+PARAM_REG_INI = "REG_INI"
+PARAM_REG_FIN = "REG_FIN"
+PARAM_CAMPO_POS_REL = "CAMPO_POS_REL"
+PARAM_CAMPO_POS_REL_CLAS = "CAMPO_POS_REL_CLAS"
+PARAM_RANGO_POS_REL = "RANGO_POS_REL"
+
+def _parse_rango_pos_rel(text, defaults):
+    """Convierte el texto de rangos a una tupla de limites."""
+    if text is None or not str(text).strip():
+        return tuple(defaults)
+
+    numbers = re.findall(r"[-+]?\d+(?:[\.,]\d+)?", str(text))
+    if not numbers:
+        return tuple(defaults)
+
+    limites = []
+    for num in numbers:
+        try:
+            valor = float(num.replace(",", "."))
+        except ValueError:
+            continue
+        if valor > 0:
+            limites.append(valor)
+
+    if not limites:
+        return tuple(defaults)
+
+    # Asegura orden ascendente y evita repetidos para clasificacion estable.
+    return tuple(sorted(set(limites)))
 
 @alg(name='calculo_PoscicionRelativa',
      label='Calculo Posicion Relativa',
      group='personalizados',
      group_label='Personalizados')
 @alg.input(type=alg.VECTOR_LAYER, name='Colectores', label='Capa Colectores')
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_PENDIENTE,
+    label="Nombre campo pendiente",
+    default=",".join(PENDIENTE_CANDIDATOS_DEFAULT),
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_REG_INI,
+    label="Nombre campo registro inicial",
+    default=",".join(REGISTRO_INICIAL_CANDIDATOS_DEFAULT),
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_REG_FIN,
+    label="Nombre campo registro final",
+    default=",".join(REGISTRO_FINAL_CANDIDATOS_DEFAULT),
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_CAMPO_POS_REL,
+    label="Nombre campo salida (posicion relativa)",
+    default=CAMPO_POS_REL_DEFAULT,
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_CAMPO_POS_REL_CLAS,
+    label="Nombre campo salida (CF posicion relativa)",
+    default=CAMPO_POS_REL_CLAS_DEFAULT,
+)
+@alg.input(
+    type=alg.STRING,
+    name=PARAM_RANGO_POS_REL,
+    label="Rango posicion relativa (limites, separados por coma)",
+    default=", ".join(str(int(v)) for v in RANGO_POS_REL_DEFAULT),
+)
 @alg.output(type=alg.NUMBER, name='ACTUALIZADAS', label='Cantidad de colectores actualizados')
 def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
     """Calcula posicionRelativas, su clasificacion y actualiza Colectores en sitio."""
+
+    # Obtener parametros configurables
+    pendiente_str = instance.parameterAsString(parameters, PARAM_PENDIENTE, context)
+    pendiente_candidatos = [c.strip() for c in pendiente_str.split(',') if c.strip()] if pendiente_str else list(PENDIENTE_CANDIDATOS_DEFAULT)
+
+    reg_ini_str = instance.parameterAsString(parameters, PARAM_REG_INI, context)
+    reg_ini_candidatos = [c.strip() for c in reg_ini_str.split(',') if c.strip()] if reg_ini_str else list(REGISTRO_INICIAL_CANDIDATOS_DEFAULT)
+
+    reg_fin_str = instance.parameterAsString(parameters, PARAM_REG_FIN, context)
+    reg_fin_candidatos = [c.strip() for c in reg_fin_str.split(',') if c.strip()] if reg_fin_str else list(REGISTRO_FINAL_CANDIDATOS_DEFAULT)
+
+    campo_pos_rel = instance.parameterAsString(parameters, PARAM_CAMPO_POS_REL, context)
+    campo_pos_rel = campo_pos_rel.strip() if campo_pos_rel else CAMPO_POS_REL_DEFAULT
+
+    campo_pos_rel_clas = instance.parameterAsString(parameters, PARAM_CAMPO_POS_REL_CLAS, context)
+    campo_pos_rel_clas = campo_pos_rel_clas.strip() if campo_pos_rel_clas else CAMPO_POS_REL_CLAS_DEFAULT
+
+    rango_str = instance.parameterAsString(parameters, PARAM_RANGO_POS_REL, context)
+    rango_pos_rel = _parse_rango_pos_rel(rango_str, RANGO_POS_REL_DEFAULT)
+
+    feedback.pushInfo(f"Campo pendiente configurado: {', '.join(pendiente_candidatos)}")
+    feedback.pushInfo(f"Campo registro inicial configurado: {', '.join(reg_ini_candidatos)}")
+    feedback.pushInfo(f"Campo registro final configurado: {', '.join(reg_fin_candidatos)}")
+    feedback.pushInfo(f"Campo salida posicion relativa: {campo_pos_rel}")
+    feedback.pushInfo(f"Campo salida CF posicion relativa: {campo_pos_rel_clas}")
+    feedback.pushInfo(f"Rango posicion relativa configurado: {', '.join(str(int(v)) for v in rango_pos_rel)}")
 
     # Convierte valores de atributos a float de forma segura.
     def to_float(value):
@@ -38,22 +135,17 @@ def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
             return None
 
     # Asigna clase segun la tabla de posicion relativa definida por negocio.
-    def clasificar_posicion_relativa(valor):
-        if valor <= 10:
-            return 1
-        if valor <= 30:
-            return 2
-        if valor <= 70:
-            return 3
-        if valor <= 120:
-            return 4
-        if valor <= 150:
-            return 5
-        return 6
+    def clasificar_posicion_relativa(valor, limites):
+        if valor == 0:
+            return 0
+        for idx, limite in enumerate(limites, start=1):
+            if valor <= limite:
+                return idx
+        return len(limites) + 1
 
     # Normaliza IDs de registro para compararlos sin problemas de tipo o espacios.
     def normalize_node(value):
-        if value is None:
+        if value is None or (hasattr(value, 'isNull') and value.isNull()) or str(value).strip() == '':
             return ''
         return str(value).strip()
 
@@ -83,15 +175,15 @@ def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
     fields = colectores_layer.fields()
 
     # Sin pendiente no se puede aplicar la regla en bifurcaciones.
-    pendiente_idx = find_field_index(fields, PENDIENTE_CANDIDATOS, partial_tokens=('pend',))
+    pendiente_idx = find_field_index(fields, pendiente_candidatos, partial_tokens=('pend',))
     if pendiente_idx == -1:
         raise QgsProcessingException(
             'No se encontro un campo de pendiente. Inclui un campo como Pendiente.'
         )
 
     # La conectividad de la red se define por estos dos campos de registros.
-    idx_reg_ini = find_field_index(fields, REGISTRO_INICIAL_CANDIDATOS)
-    idx_reg_fin = find_field_index(fields, REGISTRO_FINAL_CANDIDATOS)
+    idx_reg_ini = find_field_index(fields, reg_ini_candidatos)
+    idx_reg_fin = find_field_index(fields, reg_fin_candidatos)
     if idx_reg_ini == -1 or idx_reg_fin == -1:
         raise QgsProcessingException(
             'No se encontraron los campos Registro_Inicial y/o Registro_Final.'
@@ -106,31 +198,31 @@ def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
     try:
         # Crea posicionRelativas solo si no existe.
         fields = colectores_layer.fields()
-        idx_pos = find_field_index(fields, (CAMPO_POS_REL,))
+        idx_pos = find_field_index(fields, (campo_pos_rel,))
         if idx_pos == -1:
-            if not colectores_layer.addAttribute(QgsField(CAMPO_POS_REL, QVariant.Int, len=10, prec=0)):
+            if not colectores_layer.addAttribute(QgsField(campo_pos_rel, QVariant.Int, len=10, prec=0)):
                 raise QgsProcessingException(
                     'No se pudo crear el campo posicionRelativas en Colectores.'
                 )
             colectores_layer.updateFields()
             fields = colectores_layer.fields()
-            idx_pos = find_field_index(fields, (CAMPO_POS_REL,))
+            idx_pos = find_field_index(fields, (campo_pos_rel,))
             if idx_pos == -1:
                 raise QgsProcessingException('El campo posicionRelativas no quedo disponible.')
 
         # Crea la clasificacion de posicion relativa solo si no existe.
         fields = colectores_layer.fields()
-        idx_pos_clas = find_field_index(fields, (CAMPO_POS_REL_CLAS,))
+        idx_pos_clas = find_field_index(fields, (campo_pos_rel_clas,))
         if idx_pos_clas == -1:
-            if not colectores_layer.addAttribute(QgsField(CAMPO_POS_REL_CLAS, QVariant.Int, len=10, prec=0)):
+            if not colectores_layer.addAttribute(QgsField(campo_pos_rel_clas, QVariant.Int, len=10, prec=0)):
                 raise QgsProcessingException(
-                    f'No se pudo crear el campo {CAMPO_POS_REL_CLAS} en Colectores.'
+                    f'No se pudo crear el campo {campo_pos_rel_clas} en Colectores.'
                 )
             colectores_layer.updateFields()
             fields = colectores_layer.fields()
-            idx_pos_clas = find_field_index(fields, (CAMPO_POS_REL_CLAS,))
+            idx_pos_clas = find_field_index(fields, (campo_pos_rel_clas,))
             if idx_pos_clas == -1:
-                raise QgsProcessingException(f'El campo {CAMPO_POS_REL_CLAS} no quedo disponible.')
+                raise QgsProcessingException(f'El campo {campo_pos_rel_clas} no quedo disponible.')
 
         # Carga todas las features para poder construir indices y resolver recursion.
         features = list(colectores_layer.getFeatures())
@@ -224,7 +316,12 @@ def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
             if feedback.isCanceled():
                 break
             fid = feature.id()
-            posicion_relativa[fid] = calcular_posicion(fid, set())
+            nodo_inicio = start_node[fid]
+            nodo_final = end_node[fid]
+            if nodo_inicio == '' and nodo_final == '':
+                posicion_relativa[fid] = 0
+            else:
+                posicion_relativa[fid] = calcular_posicion(fid, set())
             if total:
                 feedback.setProgress(50.0 * i / total)
 
@@ -235,7 +332,7 @@ def calculo_PoscicionRelativa(instance, parameters, context, feedback, inputs):
                 break
 
             nuevo_valor = int(posicion_relativa.get(feature.id(), 1))
-            nueva_clasificacion = clasificar_posicion_relativa(nuevo_valor)
+            nueva_clasificacion = clasificar_posicion_relativa(nuevo_valor, rango_pos_rel)
             valor_actual = to_int_or_none(feature[idx_pos])
             valor_actual_clas = to_int_or_none(feature[idx_pos_clas])
             if valor_actual != nuevo_valor or valor_actual_clas != nueva_clasificacion:
