@@ -4,6 +4,7 @@ from qgis.core import (
     QgsProcessingParameterVectorLayer,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterFeatureSink,
+    QgsProcessingParameterString,
     QgsProcessingOutputNumber,
 )
 import processing
@@ -25,6 +26,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         7. CF Total
         8. PF Probabilidad de Falla
         9. Riesgo
+       10. Aplicar Simbologia (deshabilitado)
     """
 
     COLECTORES           = "COLECTORES"
@@ -33,6 +35,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
     CURSOS_AGUA          = "CURSOS_AGUA"
     BUFFERS_CLIENTES     = "BUFFERS_CLIENTES"
     BUFFERS_AGUA         = "BUFFERS_AGUA"
+    CAMPO_SIMBOLOGIA     = "CAMPO_SIMBOLOGIA"
     OUTPUT_PASOS_OK      = "PASOS_OK"
 
     def name(self):
@@ -100,6 +103,13 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                 "Buffers Cursos de Agua (salida)",
             )
         )
+        self.addParameter(
+           QgsProcessingParameterString(
+                self.CAMPO_SIMBOLOGIA,
+               "Campo para simbologia (valores 1-6)",
+                defaultValue="CF_Final",
+            )
+        )
 
         self.addOutput(
             QgsProcessingOutputNumber(
@@ -122,7 +132,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         if self.parameterAsSource(parameters, self.CURSOS_AGUA, context) is None:
             raise QgsProcessingException("No se pudo leer la capa Cursos de Agua.")
 
-        total_pasos      = 9
+        total_pasos      = 10
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -240,6 +250,17 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
+
+        # ── PASO 10: Aplicar Simbologia ────────────────────────────────────────
+        if not feedback.isCanceled():
+             campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
+             if _ejecutar(10, "Aplicar Simbologia",
+                          f"{PROVIDER_ID}:aplicar_simbologia",
+                          {
+                              "COLECTORES": colectores.id(),
+                              "CAMPO":      campo_simb,
+                          }) is not None:
+                 pasos_ok += 1
 
         if feedback.isCanceled():
             feedback.pushWarning("Flujo cancelado por el usuario.")
