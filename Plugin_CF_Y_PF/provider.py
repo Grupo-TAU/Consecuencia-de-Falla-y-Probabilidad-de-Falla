@@ -11,6 +11,7 @@ from .algorithms.pf_probabilidad_falla import PfProbabilidadFalla as Pf
 from .algorithms.riesgo_calculo import RiesgoCalculo as Riesgo
 from .algorithms.actualizar_colectores_long_zamp_pend import ActualizarColectoresLongZampPend as ActualizarColectores
 from .algorithms.aplicar_simbologia import AplicarSimbologia
+from .algorithms.cf_antiguedad import CfAntiguedad
 
 
 class ColectoresRiesgoProvider(QgsProcessingProvider):
@@ -27,6 +28,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(Riesgo())
         self.addAlgorithm(ActualizarColectores())
         self.addAlgorithm(AplicarSimbologia())
+        self.addAlgorithm(CfAntiguedad())
 
     def id(self):
         return "colectores_riesgo"
