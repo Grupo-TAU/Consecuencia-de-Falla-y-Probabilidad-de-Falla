@@ -28,11 +28,11 @@ CAMPO_BUFFER_DISTANCIA_DEFAULT = "distancia_m"
 CAMPO_BUFFER_CLASE_DEFAULT     = "clase_cf"
 
 RANGOS_BUFFER_DEFAULT = [
-    (300.0,  6),
-    (1500.0, 5),
-    (3000.0, 4),
-    (4500.0, 3),
-    (6100.0, 2),
+    (50.0,  6),
+    (100.0, 5),
+    (200.0, 4),
+    (400.0, 3),
+    (800.0, 2),
 ]
 PALETA_VERDES = {
     300.0:  "#005a32",

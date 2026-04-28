@@ -23,10 +23,11 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         4. CF Profundidad
         5. CF Prox Cliente Importante
         6. CF Prox Medio Ambiental
-        7. CF Total
-        8. PF Probabilidad de Falla
-        9. Riesgo
-       10. Aplicar Simbologia (deshabilitado)
+        7. CF Antiguedad (deshabilitado)
+        8. CF Total
+        9. PF Probabilidad de Falla
+       10. Riesgo
+       11. Aplicar Simbologia (deshabilitado)
     """
 
     COLECTORES           = "COLECTORES"
@@ -224,27 +225,37 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                 buffers_agua_id = res6.get("BUFFERS_VISIBLES")
                 pasos_ok += 1
 
-        # ── PASO 7: CF Total ───────────────────────────────────────────────────
+        # ── PASO 7: CF Antiguedad ──────────────────────────────────────────────
+        # Deshabilitado: requiere columna "Edad" en la capa Colectores.
+        # if not feedback.isCanceled():
+        #     if _ejecutar(7, "CF Antiguedad",
+        #                  f"{PROVIDER_ID}:cf_antiguedad",
+        #                  {
+        #                      "COLECTORES": colectores.id(),
+        #                  }) is not None:
+        #         pasos_ok += 1
+
+        # ── PASO 8: CF Total ───────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(7, "CF Total",
+            if _ejecutar(8, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 8: PF Probabilidad de Falla ──────────────────────────────────
+        # ── PASO 9: PF Probabilidad de Falla ──────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(8, "PF Probabilidad de Falla",
+            if _ejecutar(9, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 9: Riesgo ─────────────────────────────────────────────────────
+        # ── PASO 10: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(9, "Riesgo",
+            if _ejecutar(10, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
