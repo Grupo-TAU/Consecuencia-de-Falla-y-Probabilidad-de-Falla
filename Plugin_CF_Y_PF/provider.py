@@ -13,6 +13,7 @@ from .algorithms.actualizar_colectores_long_zamp_pend import ActualizarColectore
 from .algorithms.aplicar_simbologia import AplicarSimbologia
 from .algorithms.cf_antiguedad import CfAntiguedad
 from .algorithms.cf_material import CfMaterial
+from .algorithms.cf_obstrucciones import CfObstrucciones
 
 
 class ColectoresRiesgoProvider(QgsProcessingProvider):
@@ -31,12 +32,13 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(AplicarSimbologia())
         self.addAlgorithm(CfAntiguedad())
         self.addAlgorithm(CfMaterial())
+        self.addAlgorithm(CfObstrucciones())
 
     def id(self):
         return "colectores_riesgo"
 
     def name(self):
-        return "Colectores Riesgo"
+        return "Consecuencia de Falla y Probabilidad de Falla"
 
     def longName(self):
-        return "Colectores Riesgo - Clasificacion y riesgo de red cloacal"
+        return "Consecuencia de Falla y Probabilidad de Falla - Clasificacion y riesgo de red de colectores"
