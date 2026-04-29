@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <plugins>
-  <pyqgis_plugin name="Colectores Riesgo" version="0.2.1">
+  <pyqgis_plugin name="Consecuencia de Falla y Probabilidad de Falla" version="0.2.1">
     <description>Calculo de factores de clasificacion y riesgo para colectores</description>
     <version>0.2.1</version>
     <qgis_minimum_version>3.16</qgis_minimum_version>

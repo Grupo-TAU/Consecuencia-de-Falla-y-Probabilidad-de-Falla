@@ -3,7 +3,7 @@ name=Colectores Riesgo
 version=0.2.1
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
-description=Calculo de factores de clasificacion y riesgo para colectores cloacales
+description=Calculo de factores de clasificacion y riesgo para red de colectores.
 author=
 email=
 about=Plugin para gestionar el flujo de calculo de riesgo sobre la red de colectores.
@@ -11,7 +11,7 @@ about=Plugin para gestionar el flujo de calculo de riesgo sobre la red de colect
       proximidad a clientes y medio ambiente, factor total, prioridad y riesgo final.
 tracker=
 repository=
-tags=colectores, riesgo, clasificacion, cloacal
+tags=colectores, riesgo, clasificacion
 homepage=
 category=Vector
 icon=
