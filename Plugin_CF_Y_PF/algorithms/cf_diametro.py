@@ -235,7 +235,8 @@ class CfDiametro(QgsProcessingAlgorithm):
                     _clasificar_diametro(diam_mm, rango_cfg) if diam_mm is not None else 0
                 )
 
-                if feature[idx_cf] != nueva_clase:
+                valor_actual = feature[idx_cf]
+                if valor_actual is None or valor_actual != nueva_clase:
                     ok = capa_colectores.changeAttributeValue(feature.id(), idx_cf, nueva_clase)
                     if not ok:
                         raise QgsProcessingException(

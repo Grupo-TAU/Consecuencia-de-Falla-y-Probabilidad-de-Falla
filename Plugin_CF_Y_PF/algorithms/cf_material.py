@@ -1,4 +1,4 @@
-import re
+import unicodedata
 
 from qgis.core import (
     QgsField,
@@ -11,20 +11,24 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_CF_ANTIGUEDAD = "CF_Antiguedad"
-CAMPO_EDAD          = "Edad"
+CAMPO_CF_MATERIAL = "CF_Material"
+CAMPO_MATERIAL    = "Material"
 
-# Clase 1: 0-10 | Clase 2: 11-20 | Clase 3: 21-30 | Clase 4: 31-50 | Clase 6: >50
-LIMITES_DEFAULT = [10, 20, 30, 50]
-CLASES_DEFAULT  = [1,   2,  3,  4,  6]
+# Mapeo por defecto: nombre del material (sin acentos, minusculas) → clase
+MAPEO_DEFAULT = (
+    "PE=1; "
+    "PVC=3; PEAD=3; Otro Material=3; "
+    "Hormigon Armado=4; "
+    "Hormigon Simple=5; "
+    "Mamposteria=6"
+)
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES           = "COLECTORES"
-PARAM_CAMPO_SALIDA   = "CAMPO_CF_ANTIGUEDAD"
-PARAM_CAMPO_EDAD     = "CAMPO_EDAD"
-PARAM_LIMITES        = "LIMITES_EDAD"
-PARAM_CLASES         = "CLASES_EDAD"
-OUTPUT_ACTUALIZADAS  = "ACTUALIZADAS"
+COLECTORES          = "COLECTORES"
+PARAM_CAMPO_SALIDA  = "CAMPO_CF_MATERIAL"
+PARAM_CAMPO_MAT     = "CAMPO_MATERIAL"
+PARAM_MAPEO         = "MAPEO_MATERIAL"
+OUTPUT_ACTUALIZADAS = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -34,42 +38,49 @@ def _find_field_index(fields, field_name):
     return lower_map.get(str(field_name).strip().lower(), -1)
 
 
-def _to_float_or_none(value):
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+def _normalizar(texto):
+    """Minusculas y sin acentos para comparacion robusta."""
+    if texto is None:
+        return ""
+    sin_acentos = unicodedata.normalize("NFD", str(texto))
+    sin_acentos = "".join(c for c in sin_acentos if unicodedata.category(c) != "Mn")
+    return sin_acentos.strip().lower()
 
 
-def _parse_enteros(texto, defaults):
-    """Parsea una cadena de enteros separados por coma. Devuelve defaults si falla."""
-    if not texto or not str(texto).strip():
-        return list(defaults)
-    numeros = re.findall(r"\d+", str(texto))
-    if not numeros:
-        return list(defaults)
-    return [int(n) for n in numeros]
+def _parse_mapeo(texto, default_str):
+    """
+    Parsea 'Material A=1; Material B=3; ...' en un dict {normalizado: clase}.
+    Devuelve el mapeo del default si el texto esta vacio o es invalido.
+    """
+    fuente = texto if texto and str(texto).strip() else default_str
+    mapeo  = {}
+    for par in str(fuente).split(";"):
+        par = par.strip()
+        if "=" not in par:
+            continue
+        clave, _, valor = par.partition("=")
+        try:
+            mapeo[_normalizar(clave)] = int(valor.strip())
+        except ValueError:
+            continue
+    return mapeo if mapeo else _parse_mapeo(default_str, default_str)
 
 
-def _clasificar_antiguedad(edad, limites, clases):
-    for limite, clase in zip(limites, clases):
-        if edad <= limite:
-            return clase
-    return clases[-1]
+def _clasificar_material(valor, mapeo):
+    clave = _normalizar(valor)
+    return mapeo.get(clave, 0)   # 0 = no reconocido
 
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
-class CfAntiguedad(QgsProcessingAlgorithm):
-    """Clasifica colectores por antiguedad (edad en anos) y escribe CF_Antiguedad."""
+class CfMaterial(QgsProcessingAlgorithm):
+    """Clasifica colectores por material y escribe CF_Material."""
 
     def name(self):
-        return "cf_antiguedad"
+        return "cf_material"
 
     def displayName(self):
-        return "CF Antiguedad"
+        return "CF Material"
 
     def group(self):
         return "Personalizados"
@@ -79,19 +90,22 @@ class CfAntiguedad(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun la edad (anos) y escribe el resultado "
-            "en CF_Antiguedad.\n\n"
-            "Los rangos son configurables mediante dos parametros:\n"
-            "  - Limites: limites superiores de cada tramo, separados por coma.\n"
-            "  - Clases: valor asignado a cada tramo (debe haber un valor mas que limites).\n\n"
-            "Ejemplo por defecto:\n"
-            "  Limites: 10, 20, 30, 50\n"
-            "  Clases:   1,  2,  3,  4,  6\n"
-            "  Resultado: 0-10→1 | 11-20→2 | 21-30→3 | 31-50→4 | >50→6"
+            "Clasifica cada colector segun el material y escribe el resultado "
+            "en CF_Material.\n\n"
+            "El mapeo es configurable con el formato:\n"
+            "  NombreMaterial=Clase; NombreMaterial2=Clase2; ...\n\n"
+            "La comparacion ignora mayusculas y acentos.\n"
+            "Valores no reconocidos quedan con clase 0.\n\n"
+            "Mapeo por defecto:\n"
+            "  PE=1\n"
+            "  PVC=3 | PEAD=3 | Otro Material=3\n"
+            "  Hormigon Armado=4\n"
+            "  Hormigon Simple=5\n"
+            "  Mamposteria=6"
         )
 
     def createInstance(self):
-        return CfAntiguedad()
+        return CfMaterial()
 
     # ── Definicion de parametros ───────────────────────────────────────────────
 
@@ -102,29 +116,23 @@ class CfAntiguedad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_SALIDA,
-                "Nombre campo salida (CF Antiguedad)",
-                defaultValue=CAMPO_CF_ANTIGUEDAD,
+                "Nombre campo salida (CF Material)",
+                defaultValue=CAMPO_CF_MATERIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_EDAD,
-                "Nombre campo edad (entrada)",
-                defaultValue=CAMPO_EDAD,
+                PARAM_CAMPO_MAT,
+                "Nombre campo material (entrada)",
+                defaultValue=CAMPO_MATERIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_LIMITES,
-                "Limites de edad por tramo (anos, separados por coma)",
-                defaultValue=", ".join(str(v) for v in LIMITES_DEFAULT),
-            )
-        )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CLASES,
-                "Clases por tramo (un valor mas que limites, separados por coma)",
-                defaultValue=", ".join(str(v) for v in CLASES_DEFAULT),
+                PARAM_MAPEO,
+                "Mapeo material=clase (separado por punto y coma)",
+                defaultValue=MAPEO_DEFAULT,
+                multiLine=True,
             )
         )
         self.addOutput(
@@ -143,44 +151,31 @@ class CfAntiguedad(QgsProcessingAlgorithm):
 
         campo_salida = (
             self.parameterAsString(parameters, PARAM_CAMPO_SALIDA, context).strip()
-            or CAMPO_CF_ANTIGUEDAD
+            or CAMPO_CF_MATERIAL
         )
-        campo_edad = (
-            self.parameterAsString(parameters, PARAM_CAMPO_EDAD, context).strip()
-            or CAMPO_EDAD
-        )
-
-        limites = _parse_enteros(
-            self.parameterAsString(parameters, PARAM_LIMITES, context),
-            LIMITES_DEFAULT,
-        )
-        clases = _parse_enteros(
-            self.parameterAsString(parameters, PARAM_CLASES, context),
-            CLASES_DEFAULT,
+        campo_mat = (
+            self.parameterAsString(parameters, PARAM_CAMPO_MAT, context).strip()
+            or CAMPO_MATERIAL
         )
 
-        if len(clases) != len(limites) + 1:
+        mapeo = _parse_mapeo(
+            self.parameterAsString(parameters, PARAM_MAPEO, context),
+            MAPEO_DEFAULT,
+        )
+
+        feedback.pushInfo("Mapeo configurado:")
+        for k, v in mapeo.items():
+            feedback.pushInfo(f"  '{k}' → {v}")
+
+        fields  = capa.fields()
+        idx_mat = _find_field_index(fields, campo_mat)
+        if idx_mat == -1:
             raise QgsProcessingException(
-                f"La cantidad de clases ({len(clases)}) debe ser exactamente "
-                f"uno mas que la cantidad de limites ({len(limites)})."
+                f"No se encontro el campo '{campo_mat}' en Colectores."
             )
 
-        feedback.pushInfo(
-            "Limites (anos): " + ", ".join(str(v) for v in limites)
-        )
-        feedback.pushInfo(
-            "Clases por tramo: " + ", ".join(str(v) for v in clases)
-        )
-
-        fields   = capa.fields()
-        idx_edad = _find_field_index(fields, campo_edad)
-        if idx_edad == -1:
-            raise QgsProcessingException(
-                f"No se encontro el campo '{campo_edad}' en Colectores."
-            )
-
-        feedback.pushInfo(f"Campo edad detectado : {fields.at(idx_edad).name()}")
-        feedback.pushInfo(f"Campo salida         : {campo_salida}")
+        feedback.pushInfo(f"Campo material detectado : {fields.at(idx_mat).name()}")
+        feedback.pushInfo(f"Campo salida             : {campo_salida}")
 
         # Crear el campo de salida si no existe
         idx_cf = fields.lookupField(campo_salida)
@@ -205,8 +200,10 @@ class CfAntiguedad(QgsProcessingAlgorithm):
                 raise QgsProcessingException("No se pudo iniciar el modo de edicion en Colectores.")
             inicio_edicion = True
 
-        features = list(capa.getFeatures())
-        total    = len(features)
+        features     = list(capa.getFeatures())
+        total        = len(features)
+        no_reconocidos = set()
+
         if total == 0:
             if inicio_edicion:
                 capa.commitChanges()
@@ -218,11 +215,11 @@ class CfAntiguedad(QgsProcessingAlgorithm):
                 if feedback.isCanceled():
                     break
 
-                edad        = _to_float_or_none(feature[idx_edad])
-                nueva_clase = (
-                    _clasificar_antiguedad(edad, limites, clases)
-                    if edad is not None else 0
-                )
+                valor_mat   = feature[idx_mat]
+                nueva_clase = _clasificar_material(valor_mat, mapeo)
+
+                if nueva_clase == 0 and valor_mat is not None and str(valor_mat).strip():
+                    no_reconocidos.add(str(valor_mat).strip())
 
                 valor_actual = feature[idx_cf]
                 if valor_actual is None or valor_actual != nueva_clase:
@@ -247,5 +244,11 @@ class CfAntiguedad(QgsProcessingAlgorithm):
             if inicio_edicion and capa.isEditable():
                 capa.rollBack()
             raise
+
+        if no_reconocidos:
+            feedback.pushWarning(
+                "Materiales no reconocidos (quedan con clase 0): "
+                + ", ".join(sorted(no_reconocidos))
+            )
 
         return {OUTPUT_ACTUALIZADAS: actualizadas}
