@@ -12,6 +12,7 @@ from .algorithms.riesgo_calculo import RiesgoCalculo as Riesgo
 from .algorithms.actualizar_colectores_long_zamp_pend import ActualizarColectoresLongZampPend as ActualizarColectores
 from .algorithms.aplicar_simbologia import AplicarSimbologia
 from .algorithms.cf_antiguedad import CfAntiguedad
+from .algorithms.cf_material import CfMaterial
 
 
 class ColectoresRiesgoProvider(QgsProcessingProvider):
@@ -29,6 +30,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(ActualizarColectores())
         self.addAlgorithm(AplicarSimbologia())
         self.addAlgorithm(CfAntiguedad())
+        self.addAlgorithm(CfMaterial())
 
     def id(self):
         return "colectores_riesgo"

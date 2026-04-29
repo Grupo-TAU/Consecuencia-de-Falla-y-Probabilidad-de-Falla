@@ -4,7 +4,7 @@ from qgis.core import (
     QgsProcessingParameterVectorLayer,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterFeatureSink,
-    QgsProcessingParameterString,
+    # QgsProcessingParameterString,
     QgsProcessingOutputNumber,
 )
 import processing
@@ -23,11 +23,12 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         4. CF Profundidad
         5. CF Prox Cliente Importante
         6. CF Prox Medio Ambiental
-        7. CF Antiguedad (deshabilitado)
-        8. CF Total
-        9. PF Probabilidad de Falla
-       10. Riesgo
-       11. Aplicar Simbologia (deshabilitado)
+        7. CF Antiguedad
+        8. CF Material
+        9. CF Total
+       10. PF Probabilidad de Falla
+       11. Riesgo
+       12. Aplicar Simbologia (deshabilitado)
     """
 
     COLECTORES           = "COLECTORES"
@@ -36,7 +37,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
     CURSOS_AGUA          = "CURSOS_AGUA"
     BUFFERS_CLIENTES     = "BUFFERS_CLIENTES"
     BUFFERS_AGUA         = "BUFFERS_AGUA"
-    CAMPO_SIMBOLOGIA     = "CAMPO_SIMBOLOGIA"
+    #CAMPO_SIMBOLOGIA     = "CAMPO_SIMBOLOGIA"
     OUTPUT_PASOS_OK      = "PASOS_OK"
 
     def name(self):
@@ -104,13 +105,13 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                 "Buffers Cursos de Agua (salida)",
             )
         )
-        self.addParameter(
-           QgsProcessingParameterString(
-                self.CAMPO_SIMBOLOGIA,
-               "Campo para simbologia (valores 1-6)",
-                defaultValue="CF_Final",
-            )
-        )
+        #self.addParameter(
+        #   QgsProcessingParameterString(
+        #        self.CAMPO_SIMBOLOGIA,
+        #       "Campo para simbologia (valores 1-6)",
+        #        defaultValue="CF_Final",
+        #    )
+        #)
 
         self.addOutput(
             QgsProcessingOutputNumber(
@@ -133,7 +134,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         if self.parameterAsSource(parameters, self.CURSOS_AGUA, context) is None:
             raise QgsProcessingException("No se pudo leer la capa Cursos de Agua.")
 
-        total_pasos      = 10
+        total_pasos      = 11
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -225,53 +226,62 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                 buffers_agua_id = res6.get("BUFFERS_VISIBLES")
                 pasos_ok += 1
 
-        # ── PASO 7: CF Antiguedad ──────────────────────────────────────────────
-        # Deshabilitado: requiere columna "Edad" en la capa Colectores.
-        # if not feedback.isCanceled():
-        #     if _ejecutar(7, "CF Antiguedad",
-        #                  f"{PROVIDER_ID}:cf_antiguedad",
-        #                  {
-        #                      "COLECTORES": colectores.id(),
-        #                  }) is not None:
-        #         pasos_ok += 1
-
-        # ── PASO 8: CF Total ───────────────────────────────────────────────────
+        # ── PASO 7: CF Antiguedad ─────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(8, "CF Total",
+            if _ejecutar(7, "CF Antiguedad",
+                         f"{PROVIDER_ID}:cf_antiguedad",
+                         {
+                             "COLECTORES": colectores.id(),
+                         }) is not None:
+                pasos_ok += 1
+
+        # ── PASO 8: CF Material ───────────────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(8, "CF Material",
+                         f"{PROVIDER_ID}:cf_material",
+                         {
+                             "COLECTORES": colectores.id(),
+                         }) is not None:
+                pasos_ok += 1
+
+        # ── PASO 9: CF Total ───────────────────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(9, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 9: PF Probabilidad de Falla ──────────────────────────────────
+        # ── PASO 10: PF Probabilidad de Falla ─────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(9, "PF Probabilidad de Falla",
+            if _ejecutar(10, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 10: Riesgo ────────────────────────────────────────────────────
+        # ── PASO 11: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(10, "Riesgo",
+            if _ejecutar(11, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 10: Aplicar Simbologia ────────────────────────────────────────
-        if not feedback.isCanceled():
-             campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
-             if _ejecutar(10, "Aplicar Simbologia",
-                          f"{PROVIDER_ID}:aplicar_simbologia",
-                          {
-                              "COLECTORES": colectores.id(),
-                              "CAMPO":      campo_simb,
-                          }) is not None:
-                 pasos_ok += 1
+        # ── PASO 12: Aplicar Simbologia ────────────────────────────────────────
+        # Deshabilitado: sobreescribe la simbologia existente en la capa.
+        # if not feedback.isCanceled():
+        #     campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
+        #     if _ejecutar(12, "Aplicar Simbologia",
+        #                  f"{PROVIDER_ID}:aplicar_simbologia",
+        #                  {
+        #                      "COLECTORES": colectores.id(),
+        #                      "CAMPO":      campo_simb,
+        #                  }) is not None:
+        #         pasos_ok += 1
 
         if feedback.isCanceled():
             feedback.pushWarning("Flujo cancelado por el usuario.")

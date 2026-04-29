@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <plugins>
-  <pyqgis_plugin name="Colectores Riesgo" version="0.2.0">
+  <pyqgis_plugin name="Colectores Riesgo" version="0.2.1">
     <description>Calculo de factores de clasificacion y riesgo para colectores</description>
     <version>0.2.0</version>
     <qgis_minimum_version>3.16</qgis_minimum_version>
     <qgis_maximum_version>4.99</qgis_maximum_version>
     <homepage>https://github.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla</homepage>
-    <download_url>https://raw.githubusercontent.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla/main/Lanzamiento/Plugin_CF_Y_PF.zip</download_url>
-    <author_name>Nahuel</author_name>
+    <download_url>https://raw.githubusercontent.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla/main/Lanzamientos/Plugin_CF_Y_PF.zip</download_url>
+    <author_name>Grupo TAU</author_name>
     <experimental>False</experimental>
   </pyqgis_plugin>
 </plugins>
