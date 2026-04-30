@@ -10,18 +10,26 @@ from qgis.PyQt.QtCore import QVariant
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CAMPO_CF_FINAL = "CF_Final"
 
-CAMPO_POS_REL_CANDIDATOS    = ("CF_PosicionRelativa", "CF_PosiciónRelativa")
-CAMPO_DIAMETRO_CANDIDATOS   = ("CF_Diametro", "CF_Diámetro")
+CAMPO_POS_REL_CANDIDATOS     = ("CF_PosicionRelativa",)
+CAMPO_DIAMETRO_CANDIDATOS    = ("CF_Diametro",)
 CAMPO_PROFUNDIDAD_CANDIDATOS = ("CF_Profundidad",)
-CAMPO_PROX_MA_CANDIDATOS    = ("CF_Prox_MedioAmbiental", "CF_ProxMedioAmbiental", "cf_MA")
-CAMPO_PROX_CI_CANDIDATOS    = ("CF_Prox_ClienteImportante", "CF_ProxClienteImportante", "cf_CI")
+CAMPO_PROX_MA_CANDIDATOS     = ("CF_Prox_MedioAmbiental",)
+CAMPO_PROX_CI_CANDIDATOS     = ("CF_Prox_ClienteImportante",)
+CAMPO_ANTIGUEDAD_CANDIDATOS  = ("CF_Antiguedad",)
+CAMPO_MATERIAL_CANDIDATOS    = ("CF_Material",)
+CAMPO_OBSTRUC_CANDIDATOS     = ("CF_Obstrucciones",)
+CAMPO_ACCESO_CANDIDATOS      = ("CF_Acceso",)  # pendiente de implementar
 
-PESO_ECONOMICO      = 0.40
-PESO_SOCIAL         = 0.40
-PESO_MEDIOAMBIENTAL = 0.20
-POSIBLE_ECONOMICO      = 12.0
-POSIBLE_SOCIAL         = 12.0
-POSIBLE_MEDIOAMBIENTAL = 6.0
+#                          Economico  Social  Medioambiental  Valorizacion
+PESO_ECONOMICO      = 0.30  # X_2 + X_3 + X_9
+PESO_SOCIAL         = 0.30  # X_1 + X_5
+PESO_MEDIOAMBIENTAL = 0.15  # X_4
+PESO_VALORIZACION   = 0.25  # X_6 + X_7 + X_8
+
+POSIBLE_ECONOMICO      = 12.0   # 3 campos × max 6
+POSIBLE_SOCIAL         = 12.0   # 2 campos × max 6
+POSIBLE_MEDIOAMBIENTAL = 6.0    # 1 campo  × max 6
+POSIBLE_VALORIZACION   = 18.0   # 3 campos × max 6
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES          = "COLECTORES"
@@ -96,12 +104,15 @@ class CfTotal(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula el CF_Final de cada colector combinando los cinco factores "
-            "(CF_PosicionRelativa, CF_Diametro, CF_Profundidad, CF_Prox_MedioAmbiental, "
-            "CF_Prox_ClienteImportante) segun la matriz de ponderacion:\n"
-            "  Economico (40 %): CF_Diametro + CF_Profundidad\n"
-            "  Social    (40 %): CF_PosicionRelativa + CF_Prox_ClienteImportante\n"
-            "  Ambiental (20 %): CF_Prox_MedioAmbiental"
+            "Calcula el CF_Final de cada colector combinando los factores de consecuencia "
+            "segun la matriz de ponderacion:\n\n"
+            "  Economico      (30 %): CF_Diametro + CF_Profundidad  [posible: 12]\n"
+            "  Social         (30 %): CF_PosicionRelativa + CF_Prox_ClienteImportante  [posible: 12]\n"
+            "  Medioambiental (15 %): CF_Prox_MedioAmbiental  [posible: 6]\n"
+            "  Valorizacion   (25 %): CF_Antiguedad + CF_Material + CF_Obstrucciones  [posible: 18]\n\n"
+            "CF_PONDERADO = (CF_TOTAL / CF_POSIBLE) * CF_FactorDePonderacion\n"
+            "CF_Final     = SUMA(CF_PONDERADO) * 6\n\n"
+            "El resultado se escribe en el campo CF_Final. Si el campo no existe, se crea automáticamente."
         )
 
     def createInstance(self):
@@ -126,6 +137,7 @@ class CfTotal(QgsProcessingAlgorithm):
 
         fields = capa_colectores.fields()
 
+        # ── Busqueda de campos ─────────────────────────────────────────────────
         idx_x1 = _find_field_index(
             fields, CAMPO_POS_REL_CANDIDATOS,
             partial_tokens=("cf", "pos", "rel"), exclude_names=(CAMPO_CF_FINAL,),
@@ -146,13 +158,34 @@ class CfTotal(QgsProcessingAlgorithm):
             fields, CAMPO_PROX_CI_CANDIDATOS,
             partial_tokens=("cf", "cliente"), exclude_names=(CAMPO_CF_FINAL,),
         )
+        idx_x6 = _find_field_index(
+            fields, CAMPO_ANTIGUEDAD_CANDIDATOS,
+            partial_tokens=("cf", "antig"), exclude_names=(CAMPO_CF_FINAL,),
+        )
+        idx_x7 = _find_field_index(
+            fields, CAMPO_MATERIAL_CANDIDATOS,
+            partial_tokens=("cf", "mater"), exclude_names=(CAMPO_CF_FINAL,),
+        )
+        idx_x8 = _find_field_index(
+            fields, CAMPO_OBSTRUC_CANDIDATOS,
+            partial_tokens=("cf", "obstr"), exclude_names=(CAMPO_CF_FINAL,),
+        )
+        # CF_Acceso es opcional (pendiente de implementar)
+        idx_x9 = _find_field_index(
+            fields, CAMPO_ACCESO_CANDIDATOS,
+            partial_tokens=("cf", "acces"), exclude_names=(CAMPO_CF_FINAL,),
+        )
 
+        # ── Validacion de campos requeridos ────────────────────────────────────
         required = {
-            "CF_PosicionRelativa (X_1)":      idx_x1,
-            "CF_Diametro (X_2)":              idx_x2,
-            "CF_Profundidad (X_3)":           idx_x3,
-            "CF_Prox_MedioAmbiental (X_4)":   idx_x4,
+            "CF_PosicionRelativa (X_1)":       idx_x1,
+            "CF_Diametro (X_2)":               idx_x2,
+            "CF_Profundidad (X_3)":            idx_x3,
+            "CF_Prox_MedioAmbiental (X_4)":    idx_x4,
             "CF_Prox_ClienteImportante (X_5)": idx_x5,
+            "CF_Antiguedad (X_6)":             idx_x6,
+            "CF_Material (X_7)":               idx_x7,
+            "CF_Obstrucciones (X_8)":          idx_x8,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:
@@ -165,7 +198,12 @@ class CfTotal(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Campo X_3 detectado: {fields.at(idx_x3).name()}")
         feedback.pushInfo(f"Campo X_4 detectado: {fields.at(idx_x4).name()}")
         feedback.pushInfo(f"Campo X_5 detectado: {fields.at(idx_x5).name()}")
+        feedback.pushInfo(f"Campo X_6 detectado: {fields.at(idx_x6).name()}")
+        feedback.pushInfo(f"Campo X_7 detectado: {fields.at(idx_x7).name()}")
+        feedback.pushInfo(f"Campo X_8 detectado: {fields.at(idx_x8).name()}")
+        #feedback.pushInfo(f"Campo X_9 detectado: {fields.at(idx_x9).name()}")
 
+        # ── Campo de salida ────────────────────────────────────────────────────
         idx_cf_final = fields.lookupField(CAMPO_CF_FINAL)
         if idx_cf_final == -1:
             if not capa_colectores.dataProvider().addAttributes(
@@ -213,13 +251,19 @@ class CfTotal(QgsProcessingAlgorithm):
                 x3 = _to_cf_value(colector[idx_x3])
                 x4 = _to_cf_value(colector[idx_x4])
                 x5 = _to_cf_value(colector[idx_x5])
+                x6 = _to_cf_value(colector[idx_x6])
+                x7 = _to_cf_value(colector[idx_x7])
+                x8 = _to_cf_value(colector[idx_x8])
+               #x9 = _to_cf_value(colector[idx_x9])
 
-                cf_pond_economico      = ((x2 + x3) / POSIBLE_ECONOMICO) * PESO_ECONOMICO
-                cf_pond_social         = ((x1 + x5) / POSIBLE_SOCIAL) * PESO_SOCIAL
-                cf_pond_medioambiental = (x4 / POSIBLE_MEDIOAMBIENTAL) * PESO_MEDIOAMBIENTAL
+                cf_pond_economico      = ((x2 + x3) / POSIBLE_ECONOMICO)      * PESO_ECONOMICO
+                cf_pond_social         = ((x1 + x5)       / POSIBLE_SOCIAL)         * PESO_SOCIAL
+                cf_pond_medioambiental = (x4               / POSIBLE_MEDIOAMBIENTAL) * PESO_MEDIOAMBIENTAL
+                cf_pond_valorizacion   = ((x6 + x7 + x8)  / POSIBLE_VALORIZACION)   * PESO_VALORIZACION
 
                 cf_final = round(
-                    (cf_pond_economico + cf_pond_social + cf_pond_medioambiental) * 6.0, 2
+                    (cf_pond_economico + cf_pond_social + cf_pond_medioambiental + cf_pond_valorizacion) * 6.0,
+                    2,
                 )
 
                 valor_actual = _to_float_or_none(colector[idx_cf_final])
