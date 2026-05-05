@@ -25,16 +25,23 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         6. CF Prox Medio Ambiental
         7. CF Antiguedad
         8. CF Material
-        9. CF Total
-       10. PF Probabilidad de Falla
-       11. Riesgo
-       12. Aplicar Simbologia (deshabilitado)
+        9. CF Acceso Mantenimiento
+       10. CF Total
+       11. PF Probabilidad de Falla
+       12. Riesgo
+       13. Aplicar Simbologia (deshabilitado)
     """
 
     COLECTORES           = "COLECTORES"
     REGISTROS            = "REGISTROS"
     CLIENTES_IMPORTANTES = "CLIENTES_IMPORTANTES"
     CURSOS_AGUA          = "CURSOS_AGUA"
+    CALLES               = "CALLES"
+    ESPACIOS_VERDES      = "ESPACIOS_VERDES"
+    ESPACIOS_PEATONALES  = "ESPACIOS_PEATONALES"
+    PADRONES             = "PADRONES"
+    CONSTRUCCIONES       = "CONSTRUCCIONES"
+    ASENTAMIENTOS        = "ASENTAMIENTOS"
     BUFFERS_CLIENTES     = "BUFFERS_CLIENTES"
     BUFFERS_AGUA         = "BUFFERS_AGUA"
     #CAMPO_SIMBOLOGIA     = "CAMPO_SIMBOLOGIA"
@@ -94,6 +101,42 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             )
         )
         self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.CALLES,
+                "Capa Calles (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.ESPACIOS_VERDES,
+                "Capa Espacios Verdes (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.ESPACIOS_PEATONALES,
+                "Capa Espacios Peatonales (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.PADRONES,
+                "Capa Padrones (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.CONSTRUCCIONES,
+                "Capa Construcciones (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.ASENTAMIENTOS,
+                "Capa Asentamientos (Acceso Mantenimiento)",
+            )
+        )
+        self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.BUFFERS_CLIENTES,
                 "Buffers Clientes Importantes (salida)",
@@ -133,8 +176,18 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             raise QgsProcessingException("No se pudo leer la capa Clientes Importantes.")
         if self.parameterAsSource(parameters, self.CURSOS_AGUA, context) is None:
             raise QgsProcessingException("No se pudo leer la capa Cursos de Agua.")
+        for nombre, param in [
+            ("Calles",              self.CALLES),
+            ("Espacios Verdes",     self.ESPACIOS_VERDES),
+            ("Espacios Peatonales", self.ESPACIOS_PEATONALES),
+            ("Padrones",            self.PADRONES),
+            ("Construcciones",      self.CONSTRUCCIONES),
+            ("Asentamientos",       self.ASENTAMIENTOS),
+        ]:
+            if self.parameterAsSource(parameters, param, context) is None:
+                raise QgsProcessingException(f"No se pudo leer la capa {nombre}.")
 
-        total_pasos      = 11
+        total_pasos      = 12
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -244,38 +297,54 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 9: CF Total ───────────────────────────────────────────────────
+        # ── PASO 9: CF Acceso Mantenimiento ───────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(9, "CF Total",
+            if _ejecutar(9, "CF Acceso Mantenimiento",
+                         f"{PROVIDER_ID}:cf_acceso_mantenimiento",
+                         {
+                             "COLECTORES":          colectores.id(),
+                             "REGISTROS":           parameters[self.REGISTROS],
+                             "CALLES":              parameters[self.CALLES],
+                             "ESPACIOS_VERDES":     parameters[self.ESPACIOS_VERDES],
+                             "ESPACIOS_PEATONALES": parameters[self.ESPACIOS_PEATONALES],
+                             "PADRONES":            parameters[self.PADRONES],
+                             "CONSTRUCCIONES":      parameters[self.CONSTRUCCIONES],
+                             "ASENTAMIENTOS":       parameters[self.ASENTAMIENTOS],
+                         }) is not None:
+                pasos_ok += 1
+
+        # ── PASO 10: CF Total ──────────────────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(10, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 10: PF Probabilidad de Falla ─────────────────────────────────
+        # ── PASO 11: PF Probabilidad de Falla ─────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(10, "PF Probabilidad de Falla",
+            if _ejecutar(11, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 11: Riesgo ────────────────────────────────────────────────────
+        # ── PASO 12: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(11, "Riesgo",
+            if _ejecutar(12, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 12: Aplicar Simbologia ────────────────────────────────────────
+        # ── PASO 13: Aplicar Simbologia ────────────────────────────────────────
         # Deshabilitado: sobreescribe la simbologia existente en la capa.
         # if not feedback.isCanceled():
         #     campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
-        #     if _ejecutar(12, "Aplicar Simbologia",
+        #     if _ejecutar(13, "Aplicar Simbologia",
         #                  f"{PROVIDER_ID}:aplicar_simbologia",
         #                  {
         #                      "COLECTORES": colectores.id(),
@@ -287,7 +356,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             feedback.pushWarning("Flujo cancelado por el usuario.")
 
         feedback.setProgress(100)
-        feedback.pushInfo(f"Flujo completado: {pasos_ok}/{total_pasos} pasos ejecutados.")
+        feedback.pushInfo(f"Flujo completado: {pasos_ok}/{total_pasos} pasos ejecutados correctamente.")
 
         return {
             self.OUTPUT_PASOS_OK:  pasos_ok,

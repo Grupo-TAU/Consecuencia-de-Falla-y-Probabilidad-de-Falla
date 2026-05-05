@@ -14,6 +14,7 @@ from .algorithms.aplicar_simbologia import AplicarSimbologia
 from .algorithms.cf_antiguedad import CfAntiguedad
 from .algorithms.cf_material import CfMaterial
 from .algorithms.cf_obstrucciones import CfObstrucciones
+from .algorithms.cf_acceso_mantenimiento import CfAccesoMantenimiento
 
 
 class ColectoresRiesgoProvider(QgsProcessingProvider):
@@ -33,6 +34,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(CfAntiguedad())
         self.addAlgorithm(CfMaterial())
         self.addAlgorithm(CfObstrucciones())
+        self.addAlgorithm(CfAccesoMantenimiento())
 
     def id(self):
         return "colectores_riesgo"
