@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <plugins>
-  <pyqgis_plugin name="Consecuencia de Falla y Probabilidad de Falla" version="0.2.1">
+  <pyqgis_plugin name="Consecuencia de Falla y Probabilidad de Falla" version="0.4.0">
     <description>Calculo de factores de clasificacion y riesgo para colectores</description>
-    <version>0.2.1</version>
+    <version>0.4.0</version>
     <qgis_minimum_version>3.16</qgis_minimum_version>
     <qgis_maximum_version>4.99</qgis_maximum_version>
     <homepage>https://github.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla</homepage>
