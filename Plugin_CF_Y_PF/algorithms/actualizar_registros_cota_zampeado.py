@@ -30,18 +30,16 @@ def _is_null(value):
 
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_COTA_ZAMP_DEFAULT    = "Cota_Zampeado_Calculada"
-CAMPO_COTA_TAPA_DEFAULT    = "Cota_Tapa_Inspeccionada"
-CAMPO_PROF_INSPEC_DEFAULT  = "Profundidad_Inspeccionada"
-CAMPO_PROF_SALTO_DEFAULT   = "Prof_Salto"
+CAMPO_COTA_ZAMP_DEFAULT   = "Cota_Zampeado_Calculada"
+CAMPO_COTA_TAPA_DEFAULT   = "Cota_Tapa_Inspeccionada"
+CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-REGISTROS                  = "REGISTROS"
-PARAM_CAMPO_COTA_ZAMP      = "CAMPO_COTA_ZAMP"
-PARAM_CAMPO_COTA_TAPA      = "CAMPO_COTA_TAPA"
-PARAM_CAMPO_PROF_INSPEC    = "CAMPO_PROF_INSPEC"
-PARAM_CAMPO_PROF_SALTO     = "CAMPO_PROF_SALTO"
-OUTPUT_ACTUALIZADOS        = "ACTUALIZADOS"
+REGISTROS             = "REGISTROS"
+PARAM_CAMPO_COTA_ZAMP = "CAMPO_COTA_ZAMP"
+PARAM_CAMPO_COTA_TAPA = "CAMPO_COTA_TAPA"
+PARAM_CAMPO_PROF_INSPEC = "CAMPO_PROF_INSPEC"
+OUTPUT_ACTUALIZADOS   = "ACTUALIZADOS"
 
 
 class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
@@ -99,14 +97,6 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                 defaultValue=CAMPO_PROF_INSPEC_DEFAULT,
             )
         )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CAMPO_PROF_SALTO,
-                "Nombre campo Prof Salto (opcional, dejar vacio si no existe)",
-                defaultValue=CAMPO_PROF_SALTO_DEFAULT,
-                optional=True,
-            )
-        )
         self.addOutput(
             QgsProcessingOutputNumber(OUTPUT_ACTUALIZADOS, "Cantidad de registros actualizados")
         )
@@ -131,17 +121,9 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
             self.parameterAsString(parameters, PARAM_CAMPO_PROF_INSPEC, context).strip()
             or CAMPO_PROF_INSPEC_DEFAULT
         )
-        campo_prof_salto_raw = self.parameterAsString(
-            parameters, PARAM_CAMPO_PROF_SALTO, context
-        )
-        campo_prof_salto = campo_prof_salto_raw.strip() if campo_prof_salto_raw else ""
-
         feedback.pushInfo(f"Campo salida              : {campo_cota_zamp}")
         feedback.pushInfo(f"Cota Tapa Inspeccionada   : {campo_cota_tapa}")
         feedback.pushInfo(f"Profundidad Inspeccionada : {campo_prof_inspec}")
-        feedback.pushInfo(
-            f"Prof Salto                : {campo_prof_salto if campo_prof_salto else '(no configurado)'}"
-        )
 
         fields = registros_layer.fields()
 
@@ -161,9 +143,6 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
         idx_cota_tapa   = _find_field_index(fields, (campo_cota_tapa,))
         idx_prof_inspec = _find_field_index(fields, (campo_prof_inspec,))
-        idx_prof_salto  = (
-            _find_field_index(fields, (campo_prof_salto,)) if campo_prof_salto else -1
-        )
 
         for nombre, idx in [
             (campo_cota_tapa,   idx_cota_tapa),
@@ -174,12 +153,6 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                     f"No se encontro el campo '{nombre}' en Registros."
                 )
 
-        if idx_prof_salto == -1:
-            feedback.pushInfo(
-                f"Campo '{campo_prof_salto}' no encontrado — "
-                "se usara Profundidad_Inspeccionada para todos los registros."
-            )
-
         inicio_edicion = False
         if not registros_layer.isEditable():
             if not registros_layer.startEditing():
@@ -188,9 +161,11 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                 )
             inicio_edicion = True
 
+        idx_id_reg     = _find_field_index(fields, ("ID", "id"))
         registros_list = list(registros_layer.getFeatures())
         total          = len(registros_list)
         actualizados   = 0
+        ids_actualizados = []
 
         try:
             for i, reg in enumerate(registros_list, start=1):
@@ -202,16 +177,10 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
                 cota_tapa   = _to_float_or_none(reg[idx_cota_tapa])
                 prof_inspec = _to_float_or_none(reg[idx_prof_inspec])
-                prof_salto  = (
-                    _to_float_or_none(reg[idx_prof_salto]) if idx_prof_salto != -1 else None
-                )
 
                 cota_calc = None
-                if cota_tapa is not None:
-                    if prof_salto is not None:
-                        cota_calc = round(cota_tapa - prof_salto, 2)
-                    elif prof_inspec is not None:
-                        cota_calc = round(cota_tapa - prof_inspec, 2)
+                if cota_tapa is not None and prof_inspec is not None:
+                    cota_calc = round(cota_tapa - prof_inspec, 2)
 
                 if cota_calc is not None:
                     if not registros_layer.changeAttributeValue(
@@ -221,6 +190,8 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                             f"No se pudo escribir '{campo_cota_zamp}' en FID {reg.id()}."
                         )
                     actualizados += 1
+                    reg_id = str(reg[idx_id_reg]).strip() if idx_id_reg != -1 else str(reg.id())
+                    ids_actualizados.append(reg_id)
 
                 feedback.setProgress(100.0 * i / max(total, 1))
 
@@ -238,4 +209,6 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
             raise
 
         feedback.pushInfo(f"Registros actualizados: {actualizados}")
+        if ids_actualizados:
+            feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
         return {OUTPUT_ACTUALIZADOS: actualizados}

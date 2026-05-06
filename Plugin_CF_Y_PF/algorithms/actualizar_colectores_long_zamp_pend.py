@@ -156,8 +156,20 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             ("Pendiente", "pendiente", "PENDIENTE", "Slope", "slope"),
         )
 
-        idx_id_reg   = _find_field_index(registros_fields, ("ID",))
-        idx_cota_reg = _find_field_index(registros_fields, ("Cota_Zampeado_Calculada",))
+        idx_id_reg          = _find_field_index(registros_fields, ("ID",))
+        idx_cota_reg        = _find_field_index(registros_fields, ("Cota_Zampeado_Calculada",))
+        idx_prof_inspec_reg = _find_field_index(
+            registros_fields,
+            ("Profundidad_Inspeccionada", "PROFUNDIDAD_INSPECCIONADA", "profundidad_inspeccionada"),
+        )
+        idx_prof_salto_col  = _find_field_index(
+            colectores_fields,
+            ("Prof_Salto", "PROF_SALTO", "Profundidad_Salto", "profundidad_salto", "prof_salto"),
+        )
+        if idx_prof_salto_col == -1:
+            feedback.pushInfo(
+                "Campo Prof_Salto no encontrado en Colectores — no se aplicara ajuste de salto."
+            )
 
         required = {
             "Registro_Inicial":               idx_reg_ini,
@@ -167,7 +179,6 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             "Longitud":                       idx_longitud,
             "Pendiente/Slope":                idx_pendiente,
             "ID (Registros)":                 idx_id_reg,
-            "Cota_Zampeado_Calculada":        idx_cota_reg,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:
@@ -191,10 +202,11 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             )
 
             # Indice espacial sobre registros
-            reg_index   = QgsSpatialIndex()
-            geom_reg    = {}   # fid → QgsGeometry (punto)
-            id_reg      = {}   # fid → valor ID (string)
-            mapa_cota   = {}   # id_string → cota (para paso 2)
+            reg_index      = QgsSpatialIndex()
+            geom_reg       = {}   # fid → QgsGeometry (punto)
+            id_reg         = {}   # fid → valor ID (string)
+            mapa_cota      = {}   # id_string → Cota_Zampeado_Calculada
+            mapa_prof_inspec = {}  # id_string → Profundidad_Inspeccionada
 
             for reg_feat in registros_source.getFeatures():
                 if not reg_feat.hasGeometry():
@@ -206,9 +218,15 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 geom_reg[reg_feat.id()] = g
                 reg_id_val = _normalize_node(reg_feat[idx_id_reg])
                 id_reg[reg_feat.id()] = reg_id_val
+                if not reg_id_val:
+                    continue
                 cota = _to_float_or_none(reg_feat[idx_cota_reg])
-                if reg_id_val and cota is not None and reg_id_val not in mapa_cota:
+                if cota is not None and reg_id_val not in mapa_cota:
                     mapa_cota[reg_id_val] = cota
+                if idx_prof_inspec_reg != -1:
+                    prof_inspec = _to_float_or_none(reg_feat[idx_prof_inspec_reg])
+                    if prof_inspec is not None and reg_id_val not in mapa_prof_inspec:
+                        mapa_prof_inspec[reg_id_val] = prof_inspec
 
             colectores_list = list(colectores_layer.getFeatures())
             total           = len(colectores_list)
@@ -305,6 +323,21 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                     cota_fin = mapa_cota.get(reg_fin)
                     if cota_fin is not None:
                         feature[idx_cota_fin] = cota_fin
+                        hubo_cambios = True
+
+                # Ajuste por Prof_Salto del colector sobre Registro_Final_Cota_Zampeado
+                if idx_prof_salto_col != -1:
+                    prof_salto     = _to_float_or_none(feature[idx_prof_salto_col])
+                    prof_inspec_fin = mapa_prof_inspec.get(reg_fin)
+                    if (
+                        prof_salto is not None
+                        and prof_inspec_fin is not None
+                        and not _is_null(feature[idx_cota_fin])
+                    ):
+                        feature[idx_cota_fin] = round(
+                            _to_float_or_none(feature[idx_cota_fin])
+                            + (prof_inspec_fin - prof_salto), 2
+                        )
                         hubo_cambios = True
 
                 cota_ini_val = _to_float_or_none(feature[idx_cota_ini])
