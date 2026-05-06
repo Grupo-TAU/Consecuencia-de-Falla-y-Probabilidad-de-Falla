@@ -1,10 +1,14 @@
 from qgis.core import (
     QgsField,
+    QgsGeometry,
+    QgsPointXY,
     QgsProcessingAlgorithm,
     QgsProcessingException,
     QgsProcessingParameterFeatureSource,
+    QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
     QgsProcessingOutputNumber,
+    QgsSpatialIndex,
 )
 from qgis.PyQt.QtCore import QVariant
 
@@ -35,10 +39,23 @@ def _is_null(value):
     return value is None
 
 
+def _endpoints(geom):
+    """Devuelve (QgsPointXY inicio, QgsPointXY fin) del primer y ultimo vertice de la linea."""
+    vertices = list(geom.vertices())
+    if not vertices:
+        return None, None
+    return (
+        QgsPointXY(vertices[0].x(),  vertices[0].y()),
+        QgsPointXY(vertices[-1].x(), vertices[-1].y()),
+    )
+
+
 # ── Constantes de parametros ───────────────────────────────────────────────────
-COLECTORES      = "COLECTORES"
-REGISTROS       = "REGISTROS"
-OUTPUT_ACTUALIZADAS = "ACTUALIZADAS"
+COLECTORES              = "COLECTORES"
+REGISTROS               = "REGISTROS"
+PARAM_TOLERANCIA_GEOM   = "TOLERANCIA_GEOM"
+TOLERANCIA_GEOM_DEFAULT = 0.5          # metros
+OUTPUT_ACTUALIZADAS     = "ACTUALIZADAS"
 
 
 class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
@@ -58,9 +75,13 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Actualiza el campo Longitud (desde la geometria), completa las cotas "
-            "zampeadas inicial y final a partir de la capa Registros, y recalcula "
-            "la pendiente de cada colector."
+            "1) Completa Registro_Inicial / Registro_Final cuando estan en NULL, "
+            "buscando el Registro (punto) mas cercano al extremo del colector "
+            "dentro de la tolerancia indicada.\n\n"
+            "2) Actualiza Longitud (desde la geometria).\n\n"
+            "3) Completa Registro_Inicial_Cota_Zampeado y Registro_Final_Cota_Zampeado "
+            "a partir de la capa Registros (solo si estan en NULL).\n\n"
+            "4) Recalcula la Pendiente."
         )
 
     def createInstance(self):
@@ -70,22 +91,20 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
     def initAlgorithm(self, config=None):
         self.addParameter(
-            QgsProcessingParameterVectorLayer(
-                COLECTORES,
-                "Capa Colectores",
-            )
+            QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores")
         )
         self.addParameter(
-            QgsProcessingParameterFeatureSource(
-                REGISTROS,
-                "Capa Registros",
+            QgsProcessingParameterFeatureSource(REGISTROS, "Capa Registros")
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_TOLERANCIA_GEOM,
+                "Tolerancia geometrica para asignar Registro_Inicial/Final (metros)",
+                defaultValue=str(TOLERANCIA_GEOM_DEFAULT),
             )
         )
         self.addOutput(
-            QgsProcessingOutputNumber(
-                OUTPUT_ACTUALIZADAS,
-                "Cantidad de colectores actualizados",
-            )
+            QgsProcessingOutputNumber(OUTPUT_ACTUALIZADAS, "Cantidad de colectores actualizados")
         )
 
     # ── Logica principal ───────────────────────────────────────────────────────
@@ -99,19 +118,24 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         if registros_source is None:
             raise QgsProcessingException("No se pudo leer la capa Registros.")
 
+        try:
+            tolerancia = float(
+                self.parameterAsString(parameters, PARAM_TOLERANCIA_GEOM, context)
+                .strip().replace(",", ".")
+            )
+        except (ValueError, AttributeError):
+            tolerancia = TOLERANCIA_GEOM_DEFAULT
+
         colectores_fields = colectores_layer.fields()
         registros_fields  = registros_source.fields()
 
         # Si Longitud no existe, la crea automaticamente como campo Double.
         idx_longitud = _find_field_index(colectores_fields, ("Longitud", "LONGITUD", "longitud"))
         if idx_longitud == -1:
-            ok_longitud = colectores_layer.dataProvider().addAttributes(
+            if not colectores_layer.dataProvider().addAttributes(
                 [QgsField("Longitud", QVariant.Double, len=20, prec=2)]
-            )
-            if not ok_longitud:
-                raise QgsProcessingException(
-                    "No se pudo crear el campo Longitud en Colectores."
-                )
+            ):
+                raise QgsProcessingException("No se pudo crear el campo Longitud en Colectores.")
             colectores_layer.updateFields()
             colectores_fields = colectores_layer.fields()
             idx_longitud = _find_field_index(
@@ -151,29 +175,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 "Faltan columnas requeridas: " + ", ".join(missing)
             )
 
-        # Mapa ID de registro -> cota. Si hay duplicados, conserva el primero valido.
-        mapa_cota      = {}
-        registros_list = list(registros_source.getFeatures())
-        for i, registro in enumerate(registros_list, start=1):
-            if feedback.isCanceled():
-                break
-
-            reg_id   = _normalize_node(registro[idx_id_reg])
-            reg_cota = _to_float_or_none(registro[idx_cota_reg])
-
-            if reg_id and reg_cota is not None and reg_id not in mapa_cota:
-                mapa_cota[reg_id] = reg_cota
-
-            if registros_list:
-                feedback.setProgress(25.0 * i / len(registros_list))
-
-        colectores_list = list(colectores_layer.getFeatures())
-        total = len(colectores_list)
-        if total == 0:
-            return {OUTPUT_ACTUALIZADAS: 0}
-
-        actualizadas = 0
-
+        # ── Inicio de edicion unico para todo el algoritmo ─────────────────────
         inicio_edicion = False
         if not colectores_layer.isEditable():
             if not colectores_layer.startEditing():
@@ -182,8 +184,101 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 )
             inicio_edicion = True
 
-        # Actualiza solo filas con valor nulo en cota inicial/final.
         try:
+            # ── PASO 0: Completar Registro_Inicial / Registro_Final por geometria ──
+            feedback.pushInfo(
+                f"Paso 0: buscando registros por geometria (tolerancia={tolerancia} m)..."
+            )
+
+            # Indice espacial sobre registros
+            reg_index   = QgsSpatialIndex()
+            geom_reg    = {}   # fid → QgsGeometry (punto)
+            id_reg      = {}   # fid → valor ID (string)
+            mapa_cota   = {}   # id_string → cota (para paso 2)
+
+            for reg_feat in registros_source.getFeatures():
+                if not reg_feat.hasGeometry():
+                    continue
+                g = reg_feat.geometry()
+                if g is None or g.isEmpty():
+                    continue
+                reg_index.addFeature(reg_feat)
+                geom_reg[reg_feat.id()] = g
+                reg_id_val = _normalize_node(reg_feat[idx_id_reg])
+                id_reg[reg_feat.id()] = reg_id_val
+                cota = _to_float_or_none(reg_feat[idx_cota_reg])
+                if reg_id_val and cota is not None and reg_id_val not in mapa_cota:
+                    mapa_cota[reg_id_val] = cota
+
+            colectores_list = list(colectores_layer.getFeatures())
+            total           = len(colectores_list)
+            if total == 0:
+                if inicio_edicion:
+                    colectores_layer.commitChanges()
+                return {OUTPUT_ACTUALIZADAS: 0}
+
+            asignados_ini = 0
+            asignados_fin = 0
+
+            for i, feature in enumerate(colectores_list, start=1):
+                if feedback.isCanceled():
+                    break
+
+                geom = feature.geometry()
+                if geom is None or geom.isEmpty():
+                    continue
+
+                pt_ini, pt_fin = _endpoints(geom)
+                if pt_ini is None:
+                    continue
+
+                reg_ini_actual = _normalize_node(feature[idx_reg_ini])
+                reg_fin_actual = _normalize_node(feature[idx_reg_fin])
+
+                # Registro_Inicial nulo → buscar el registro mas cercano al primer vertice
+                if not reg_ini_actual:
+                    candidatos = reg_index.nearestNeighbor(pt_ini, 1)
+                    for fid in candidatos:
+                        g_reg = geom_reg.get(fid)
+                        if g_reg is None:
+                            continue
+                        dist = QgsGeometry.fromPointXY(pt_ini).distance(g_reg)
+                        if dist <= tolerancia:
+                            colectores_layer.changeAttributeValue(
+                                feature.id(), idx_reg_ini, id_reg[fid]
+                            )
+                            asignados_ini += 1
+                        break   # nearestNeighbor ya devuelve el mas cercano
+
+                # Registro_Final nulo → buscar el registro mas cercano al ultimo vertice
+                if not reg_fin_actual:
+                    candidatos = reg_index.nearestNeighbor(pt_fin, 1)
+                    for fid in candidatos:
+                        g_reg = geom_reg.get(fid)
+                        if g_reg is None:
+                            continue
+                        dist = QgsGeometry.fromPointXY(pt_fin).distance(g_reg)
+                        if dist <= tolerancia:
+                            colectores_layer.changeAttributeValue(
+                                feature.id(), idx_reg_fin, id_reg[fid]
+                            )
+                            asignados_fin += 1
+                        break
+
+                feedback.setProgress(15.0 * i / total)
+
+            feedback.pushInfo(
+                f"  Registro_Inicial asignados: {asignados_ini} | "
+                f"Registro_Final asignados: {asignados_fin}"
+            )
+
+            # Recarga la lista para que el paso siguiente vea los valores recien escritos
+            colectores_list = list(colectores_layer.getFeatures())
+
+            # ── PASO 1-3: Longitud, Cotas y Pendiente ─────────────────────────────
+            feedback.pushInfo("Paso 1-3: actualizando Longitud, Cotas y Pendiente...")
+            actualizadas = 0
+
             for i, feature in enumerate(colectores_list, start=1):
                 if feedback.isCanceled():
                     break
@@ -192,10 +287,9 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 reg_fin    = _normalize_node(feature[idx_reg_fin])
                 hubo_cambios = False
 
-                # Equivalente a round($length, 2) en expresiones de QGIS.
                 geom = feature.geometry()
                 if geom is not None and not geom.isEmpty():
-                    longitud_calc  = round(float(geom.length()), 2)
+                    longitud_calc   = round(float(geom.length()), 2)
                     longitud_actual = _to_float_or_none(feature[idx_longitud])
                     if longitud_actual is None or round(longitud_actual, 2) != longitud_calc:
                         feature[idx_longitud] = longitud_calc
@@ -223,7 +317,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                     and long_aux_val is not None
                     and abs(long_aux_val) > 1e-12
                 ):
-                    pendiente_calc  = round(
+                    pendiente_calc   = round(
                         ((cota_ini_val - cota_fin_val) / long_aux_val) * 100.0, 2
                     )
                     pendiente_actual = _to_float_or_none(feature[idx_pendiente])
@@ -238,7 +332,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                         )
                     actualizadas += 1
 
-                feedback.setProgress(25.0 + (75.0 * i / total))
+                feedback.setProgress(15.0 + 85.0 * i / total)
 
             if inicio_edicion:
                 if not colectores_layer.commitChanges():
