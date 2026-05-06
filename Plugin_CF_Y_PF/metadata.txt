@@ -1,6 +1,6 @@
 [general]
 name=Colectores Riesgo
-version=0.4.0
+version=0.1.0
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
 description=Calculo de factores de clasificacion y riesgo para red de colectores.
