@@ -50,11 +50,35 @@ def _endpoints(geom):
     )
 
 
-# ── Constantes de parametros ───────────────────────────────────────────────────
+# ── Defaults de campos ────────────────────────────────────────────────────────
+# Colectores
+CAMPO_LONGITUD_DEFAULT    = "Longitud"
+CAMPO_REG_INI_DEFAULT     = "Registro_Inicial"
+CAMPO_REG_FIN_DEFAULT     = "Registro_Final"
+CAMPO_COTA_INI_DEFAULT    = "Registro_Inicial_Cota_Zampeado"
+CAMPO_COTA_FIN_DEFAULT    = "Registro_Final_Cota_Zampeado"
+CAMPO_PENDIENTE_DEFAULT   = "Pendiente"
+CAMPO_PROF_SALTO_DEFAULT  = "Prof_Salto"
+# Registros
+CAMPO_ID_REG_DEFAULT      = "ID"
+CAMPO_COTA_ZAMP_DEFAULT   = "Cota_Zampeado_Calculada"
+CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
+
+# ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES              = "COLECTORES"
 REGISTROS               = "REGISTROS"
 PARAM_TOLERANCIA_GEOM   = "TOLERANCIA_GEOM"
-TOLERANCIA_GEOM_DEFAULT = 0.5          # metros
+TOLERANCIA_GEOM_DEFAULT = 0.5
+PARAM_CAMPO_LONGITUD    = "CAMPO_LONGITUD"
+PARAM_CAMPO_REG_INI     = "CAMPO_REG_INI"
+PARAM_CAMPO_REG_FIN     = "CAMPO_REG_FIN"
+PARAM_CAMPO_COTA_INI    = "CAMPO_COTA_INI"
+PARAM_CAMPO_COTA_FIN    = "CAMPO_COTA_FIN"
+PARAM_CAMPO_PENDIENTE   = "CAMPO_PENDIENTE"
+PARAM_CAMPO_PROF_SALTO  = "CAMPO_PROF_SALTO"
+PARAM_CAMPO_ID_REG      = "CAMPO_ID_REG"
+PARAM_CAMPO_COTA_ZAMP   = "CAMPO_COTA_ZAMP"
+PARAM_CAMPO_PROF_INSPEC = "CAMPO_PROF_INSPEC"
 OUTPUT_ACTUALIZADAS     = "ACTUALIZADAS"
 
 
@@ -103,6 +127,70 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 defaultValue=str(TOLERANCIA_GEOM_DEFAULT),
             )
         )
+        # ── Campos Colectores ──────────────────────────────────────────────────
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_LONGITUD, "Campo Longitud (Colectores)",
+                defaultValue=CAMPO_LONGITUD_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_REG_INI, "Campo Registro Inicial (Colectores)",
+                defaultValue=CAMPO_REG_INI_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_REG_FIN, "Campo Registro Final (Colectores)",
+                defaultValue=CAMPO_REG_FIN_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_COTA_INI, "Campo Registro Inicial Cota Zampeado (Colectores)",
+                defaultValue=CAMPO_COTA_INI_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_COTA_FIN, "Campo Registro Final Cota Zampeado (Colectores)",
+                defaultValue=CAMPO_COTA_FIN_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PENDIENTE, "Campo Pendiente (Colectores)",
+                defaultValue=CAMPO_PENDIENTE_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PROF_SALTO,
+                "Campo Prof Salto (Colectores, opcional)",
+                defaultValue=CAMPO_PROF_SALTO_DEFAULT,
+                optional=True,
+            )
+        )
+        # ── Campos Registros ───────────────────────────────────────────────────
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_ID_REG, "Campo ID (Registros)",
+                defaultValue=CAMPO_ID_REG_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_COTA_ZAMP, "Campo Cota Zampeado Calculada (Registros)",
+                defaultValue=CAMPO_COTA_ZAMP_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PROF_INSPEC, "Campo Profundidad Inspeccionada (Registros)",
+                defaultValue=CAMPO_PROF_INSPEC_DEFAULT,
+            )
+        )
         self.addOutput(
             QgsProcessingOutputNumber(OUTPUT_ACTUALIZADAS, "Cantidad de colectores actualizados")
         )
@@ -126,60 +214,72 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         except (ValueError, AttributeError):
             tolerancia = TOLERANCIA_GEOM_DEFAULT
 
+        def _param(key, default):
+            v = self.parameterAsString(parameters, key, context).strip()
+            return v or default
+
+        campo_longitud    = _param(PARAM_CAMPO_LONGITUD,    CAMPO_LONGITUD_DEFAULT)
+        campo_reg_ini     = _param(PARAM_CAMPO_REG_INI,     CAMPO_REG_INI_DEFAULT)
+        campo_reg_fin     = _param(PARAM_CAMPO_REG_FIN,     CAMPO_REG_FIN_DEFAULT)
+        campo_cota_ini    = _param(PARAM_CAMPO_COTA_INI,    CAMPO_COTA_INI_DEFAULT)
+        campo_cota_fin    = _param(PARAM_CAMPO_COTA_FIN,    CAMPO_COTA_FIN_DEFAULT)
+        campo_pendiente   = _param(PARAM_CAMPO_PENDIENTE,   CAMPO_PENDIENTE_DEFAULT)
+        campo_prof_salto  = (self.parameterAsString(parameters, PARAM_CAMPO_PROF_SALTO, context) or "").strip()
+        campo_id_reg      = _param(PARAM_CAMPO_ID_REG,      CAMPO_ID_REG_DEFAULT)
+        campo_cota_zamp   = _param(PARAM_CAMPO_COTA_ZAMP,   CAMPO_COTA_ZAMP_DEFAULT)
+        campo_prof_inspec = _param(PARAM_CAMPO_PROF_INSPEC, CAMPO_PROF_INSPEC_DEFAULT)
+
         colectores_fields = colectores_layer.fields()
         registros_fields  = registros_source.fields()
 
         # Si Longitud no existe, la crea automaticamente como campo Double.
-        idx_longitud = _find_field_index(colectores_fields, ("Longitud", "LONGITUD", "longitud"))
+        idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
         if idx_longitud == -1:
             if not colectores_layer.dataProvider().addAttributes(
-                [QgsField("Longitud", QVariant.Double, len=20, prec=2)]
+                [QgsField(campo_longitud, QVariant.Double, len=20, prec=2)]
             ):
-                raise QgsProcessingException("No se pudo crear el campo Longitud en Colectores.")
+                raise QgsProcessingException(
+                    f"No se pudo crear el campo '{campo_longitud}' en Colectores."
+                )
             colectores_layer.updateFields()
             colectores_fields = colectores_layer.fields()
-            idx_longitud = _find_field_index(
-                colectores_fields, ("Longitud", "LONGITUD", "longitud")
-            )
+            idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
             if idx_longitud == -1:
                 raise QgsProcessingException(
-                    "El campo Longitud no quedo disponible en Colectores."
+                    f"El campo '{campo_longitud}' no quedo disponible en Colectores."
                 )
-            feedback.pushInfo("Se creo el campo Longitud en Colectores.")
+            feedback.pushInfo(f"Se creo el campo '{campo_longitud}' en Colectores.")
 
-        idx_reg_ini   = _find_field_index(colectores_fields, ("Registro_Inicial",))
-        idx_reg_fin   = _find_field_index(colectores_fields, ("Registro_Final", "Registro_FInal"))
-        idx_cota_ini  = _find_field_index(colectores_fields, ("Registro_Inicial_Cota_Zampeado",))
-        idx_cota_fin  = _find_field_index(colectores_fields, ("Registro_Final_Cota_Zampeado",))
-        idx_pendiente = _find_field_index(
-            colectores_fields,
-            ("Pendiente", "pendiente", "PENDIENTE", "Slope", "slope"),
-        )
+        idx_reg_ini   = _find_field_index(colectores_fields, (campo_reg_ini,))
+        idx_reg_fin   = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
+        idx_cota_ini  = _find_field_index(colectores_fields, (campo_cota_ini,))
+        idx_cota_fin  = _find_field_index(colectores_fields, (campo_cota_fin,))
+        idx_pendiente = _find_field_index(colectores_fields, (campo_pendiente, "Slope", "slope"))
 
-        idx_id_reg          = _find_field_index(registros_fields, ("ID",))
-        idx_cota_reg        = _find_field_index(registros_fields, ("Cota_Zampeado_Calculada",))
-        idx_prof_inspec_reg = _find_field_index(
-            registros_fields,
-            ("Profundidad_Inspeccionada", "PROFUNDIDAD_INSPECCIONADA", "profundidad_inspeccionada"),
-        )
-        idx_prof_salto_col  = _find_field_index(
-            colectores_fields,
-            ("Prof_Salto", "PROF_SALTO", "Profundidad_Salto", "profundidad_salto", "prof_salto"),
+        idx_id_col          = _find_field_index(colectores_fields, ("ID", "id"))
+        idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
+        idx_cota_reg        = _find_field_index(registros_fields, (campo_cota_zamp,))
+        idx_prof_inspec_reg = _find_field_index(registros_fields, (campo_prof_inspec,))
+        idx_prof_salto_col  = (
+            _find_field_index(colectores_fields, (campo_prof_salto,))
+            if campo_prof_salto else -1
         )
         if idx_prof_salto_col == -1:
             feedback.pushInfo(
-                "Campo Prof_Salto no encontrado en Colectores — no se aplicara ajuste de salto."
+                f"Campo '{campo_prof_salto}' no encontrado en Colectores — no se aplicara ajuste de salto."
+                if campo_prof_salto else
+                "Campo Prof_Salto no configurado — no se aplicara ajuste de salto."
             )
 
         required = {
-            "Registro_Inicial":               idx_reg_ini,
-            "Registro_Final":                 idx_reg_fin,
-            "Registro_Inicial_Cota_Zampeado": idx_cota_ini,
-            "Registro_Final_Cota_Zampeado":   idx_cota_fin,
-            "Longitud":                       idx_longitud,
-            "Pendiente/Slope":                idx_pendiente,
-            "ID (Registros)":                 idx_id_reg,
-            "Cota_Zampeado_Calculada":        idx_cota_reg,
+            campo_reg_ini:   idx_reg_ini,
+            campo_reg_fin:   idx_reg_fin,
+            campo_cota_ini:  idx_cota_ini,
+            campo_cota_fin:  idx_cota_fin,
+            campo_longitud:  idx_longitud,
+            campo_pendiente: idx_pendiente,
+            campo_id_reg:    idx_id_reg,
+            campo_cota_zamp: idx_cota_reg,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:
@@ -297,6 +397,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             # ── PASO 1-3: Longitud, Cotas y Pendiente ─────────────────────────────
             feedback.pushInfo("Paso 1-3: actualizando Longitud, Cotas y Pendiente...")
             actualizadas = 0
+            ids_actualizados = []
 
             for i, feature in enumerate(colectores_list, start=1):
                 if feedback.isCanceled():
@@ -320,20 +421,21 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                         feature[idx_cota_ini] = cota_ini
                         hubo_cambios = True
 
+                cota_fin_recien_copiada = False
                 if _is_null(feature[idx_cota_fin]):
                     cota_fin = mapa_cota.get(reg_fin)
                     if cota_fin is not None:
                         feature[idx_cota_fin] = cota_fin
                         hubo_cambios = True
+                        cota_fin_recien_copiada = True
 
-                # Ajuste por Prof_Salto del colector sobre Registro_Final_Cota_Zampeado
-                if idx_prof_salto_col != -1:
-                    prof_salto     = _to_float_or_none(feature[idx_prof_salto_col])
+                # Ajuste por Prof_Salto: solo si la cota fue copiada en esta ejecucion
+                if cota_fin_recien_copiada and idx_prof_salto_col != -1:
+                    prof_salto      = _to_float_or_none(feature[idx_prof_salto_col])
                     prof_inspec_fin = mapa_prof_inspec.get(reg_fin)
                     if (
                         prof_salto is not None
                         and prof_inspec_fin is not None
-                        and not _is_null(feature[idx_cota_fin])
                     ):
                         feature[idx_cota_fin] = round(
                             _to_float_or_none(feature[idx_cota_fin])
@@ -365,8 +467,14 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                             f"No se pudo actualizar la entidad con FID {feature.id()} en Colectores."
                         )
                     actualizadas += 1
+                    col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(15.0 + 85.0 * i / total)
+
+            feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+            if ids_actualizados:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
 
             if inicio_edicion:
                 if not colectores_layer.commitChanges():
