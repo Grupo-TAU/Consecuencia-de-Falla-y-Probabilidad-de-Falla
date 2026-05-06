@@ -15,6 +15,7 @@ from .algorithms.cf_antiguedad import CfAntiguedad
 from .algorithms.cf_material import CfMaterial
 from .algorithms.cf_obstrucciones import CfObstrucciones
 from .algorithms.cf_acceso_mantenimiento import CfAccesoMantenimiento
+from .algorithms.actualizar_registros_cota_zampeado import ActualizarRegistrosCotaZampeado
 
 
 class ColectoresRiesgoProvider(QgsProcessingProvider):
@@ -35,6 +36,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(CfMaterial())
         self.addAlgorithm(CfObstrucciones())
         self.addAlgorithm(CfAccesoMantenimiento())
+        self.addAlgorithm(ActualizarRegistrosCotaZampeado())
 
     def id(self):
         return "colectores_riesgo"
