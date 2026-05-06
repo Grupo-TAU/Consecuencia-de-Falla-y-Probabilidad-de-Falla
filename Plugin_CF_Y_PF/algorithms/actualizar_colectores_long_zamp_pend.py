@@ -179,6 +179,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             "Longitud":                       idx_longitud,
             "Pendiente/Slope":                idx_pendiente,
             "ID (Registros)":                 idx_id_reg,
+            "Cota_Zampeado_Calculada":        idx_cota_reg,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:

@@ -18,7 +18,7 @@ CAMPO_PROX_CI_CANDIDATOS     = ("CF_Prox_ClienteImportante",)
 CAMPO_ANTIGUEDAD_CANDIDATOS  = ("CF_Antiguedad",)
 CAMPO_MATERIAL_CANDIDATOS    = ("CF_Material",)
 CAMPO_OBSTRUC_CANDIDATOS     = ("CF_Obstrucciones",)
-CAMPO_ACCESO_CANDIDATOS      = ("CF_Acceso",)  # pendiente de implementar
+CAMPO_ACCESO_CANDIDATOS      = ("CF_AccesoMantenimiento",)  
 
 #                          Economico  Social  Medioambiental  Valorizacion
 PESO_ECONOMICO      = 0.30  # X_2 + X_3 + X_9
@@ -26,7 +26,7 @@ PESO_SOCIAL         = 0.30  # X_1 + X_5
 PESO_MEDIOAMBIENTAL = 0.15  # X_4
 PESO_VALORIZACION   = 0.25  # X_6 + X_7 + X_8
 
-POSIBLE_ECONOMICO      = 12.0   # 3 campos × max 6
+POSIBLE_ECONOMICO      = 18.0   # 3 campos × max 6
 POSIBLE_SOCIAL         = 12.0   # 2 campos × max 6
 POSIBLE_MEDIOAMBIENTAL = 6.0    # 1 campo  × max 6
 POSIBLE_VALORIZACION   = 18.0   # 3 campos × max 6
@@ -170,7 +170,6 @@ class CfTotal(QgsProcessingAlgorithm):
             fields, CAMPO_OBSTRUC_CANDIDATOS,
             partial_tokens=("cf", "obstr"), exclude_names=(CAMPO_CF_FINAL,),
         )
-        # CF_Acceso es opcional (pendiente de implementar)
         idx_x9 = _find_field_index(
             fields, CAMPO_ACCESO_CANDIDATOS,
             partial_tokens=("cf", "acces"), exclude_names=(CAMPO_CF_FINAL,),
@@ -186,6 +185,7 @@ class CfTotal(QgsProcessingAlgorithm):
             "CF_Antiguedad (X_6)":             idx_x6,
             "CF_Material (X_7)":               idx_x7,
             "CF_Obstrucciones (X_8)":          idx_x8,
+            "CF_AccesoMantenimiento (X_9)":    idx_x9,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:
@@ -201,7 +201,7 @@ class CfTotal(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Campo X_6 detectado: {fields.at(idx_x6).name()}")
         feedback.pushInfo(f"Campo X_7 detectado: {fields.at(idx_x7).name()}")
         feedback.pushInfo(f"Campo X_8 detectado: {fields.at(idx_x8).name()}")
-        #feedback.pushInfo(f"Campo X_9 detectado: {fields.at(idx_x9).name()}")
+        feedback.pushInfo(f"Campo X_9 detectado: {fields.at(idx_x9).name()}")
 
         # ── Campo de salida ────────────────────────────────────────────────────
         idx_cf_final = fields.lookupField(CAMPO_CF_FINAL)
@@ -254,9 +254,9 @@ class CfTotal(QgsProcessingAlgorithm):
                 x6 = _to_cf_value(colector[idx_x6])
                 x7 = _to_cf_value(colector[idx_x7])
                 x8 = _to_cf_value(colector[idx_x8])
-               #x9 = _to_cf_value(colector[idx_x9])
+                x9 = _to_cf_value(colector[idx_x9])
 
-                cf_pond_economico      = ((x2 + x3) / POSIBLE_ECONOMICO)      * PESO_ECONOMICO
+                cf_pond_economico      = ((x2 + x3 + x9) / POSIBLE_ECONOMICO)      * PESO_ECONOMICO
                 cf_pond_social         = ((x1 + x5)       / POSIBLE_SOCIAL)         * PESO_SOCIAL
                 cf_pond_medioambiental = (x4               / POSIBLE_MEDIOAMBIENTAL) * PESO_MEDIOAMBIENTAL
                 cf_pond_valorizacion   = ((x6 + x7 + x8)  / POSIBLE_VALORIZACION)   * PESO_VALORIZACION
