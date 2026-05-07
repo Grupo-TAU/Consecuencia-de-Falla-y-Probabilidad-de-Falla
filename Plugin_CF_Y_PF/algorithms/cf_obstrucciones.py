@@ -70,7 +70,7 @@ class CfObstrucciones(QgsProcessingAlgorithm):
             "  0 obstrucciones (Baja)  → 1\n"
             "  1 obstruccion   (Media) → 3\n"
             "  >=2 obstrucciones (Alta)  → 6\n\n"
-            "Si el campo de obstrucciones esta vacio o es nulo, se asigna clase 0."
+            "Si el campo de obstrucciones esta vacio o es nulo, se asigna clase 1."
         )
 
     def createInstance(self):
@@ -170,7 +170,7 @@ class CfObstrucciones(QgsProcessingAlgorithm):
                 obs         = _to_int_or_none(feature[idx_obs])
                 nueva_clase = (
                     _clasificar_obstrucciones(obs)
-                    if obs is not None else 0
+                    if obs is not None else 1
                 )
 
                 valor_actual = feature[idx_cf]

@@ -12,7 +12,7 @@ from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CAMPO_CF_ANTIGUEDAD = "CF_Antiguedad"
-CAMPO_EDAD          = "Edad"
+CAMPO_EDAD          = "Antiguedad"
 
 # Clase 1: 0-10 | Clase 2: 11-20 | Clase 3: 21-30 | Clase 4: 31-50 | Clase 6: >50
 LIMITES_DEFAULT = [10, 20, 30, 50]
@@ -109,14 +109,14 @@ class CfAntiguedad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_EDAD,
-                "Nombre campo edad (entrada)",
+                "Nombre campo antiguedad (entrada)",
                 defaultValue=CAMPO_EDAD,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_LIMITES,
-                "Limites de edad por tramo (anos, separados por coma)",
+                "Limites de antiguedad por tramo (anos, separados por coma)",
                 defaultValue=", ".join(str(v) for v in LIMITES_DEFAULT),
             )
         )
