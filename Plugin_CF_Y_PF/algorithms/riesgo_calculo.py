@@ -3,19 +3,25 @@ from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingException,
     QgsProcessingOutputNumber,
+    QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
 )
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_RIESGO = "Riesgo"
+CAMPO_RIESGO_DEFAULT   = "Riesgo"
+CAMPO_CF_FINAL_DEFAULT = "CF_Final"
+CAMPO_PF_DEFAULT       = "PF"
 
 CAMPO_CF_FINAL_CANDIDATOS = ("CF_Final", "CF final", "cf_final")
 CAMPO_PF_CANDIDATOS       = ("PF", "pf")
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES          = "COLECTORES"
-OUTPUT_ACTUALIZADAS = "ACTUALIZADAS"
+COLECTORES           = "COLECTORES"
+PARAM_CAMPO_RIESGO   = "CAMPO_RIESGO"
+PARAM_CAMPO_CF_FINAL = "CAMPO_CF_FINAL"
+PARAM_CAMPO_PF       = "CAMPO_PF"
+OUTPUT_ACTUALIZADAS  = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -106,6 +112,27 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores")
         )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_RIESGO,
+                "Nombre campo salida (Riesgo)",
+                defaultValue=CAMPO_RIESGO_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_CF_FINAL,
+                "Nombre campo CF Final",
+                defaultValue=CAMPO_CF_FINAL_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PF,
+                "Nombre campo PF",
+                defaultValue=CAMPO_PF_DEFAULT,
+            )
+        )
         self.addOutput(
             QgsProcessingOutputNumber(OUTPUT_ACTUALIZADAS, "Cantidad de colectores actualizados")
         )
@@ -117,43 +144,59 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         if capa_colectores is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
 
+        campo_riesgo   = self.parameterAsString(parameters, PARAM_CAMPO_RIESGO,   context).strip() or CAMPO_RIESGO_DEFAULT
+        campo_cf_final = self.parameterAsString(parameters, PARAM_CAMPO_CF_FINAL, context).strip() or CAMPO_CF_FINAL_DEFAULT
+        campo_pf       = self.parameterAsString(parameters, PARAM_CAMPO_PF,       context).strip() or CAMPO_PF_DEFAULT
+
+        feedback.pushInfo(f"Campo salida (Riesgo): {campo_riesgo}")
+        feedback.pushInfo(f"Campo CF Final       : {campo_cf_final}")
+        feedback.pushInfo(f"Campo PF             : {campo_pf}")
+
         fields = capa_colectores.fields()
 
         idx_cf_final = _find_field_index(
-            fields, CAMPO_CF_FINAL_CANDIDATOS, exclude_names=(CAMPO_RIESGO,)
+            fields,
+            (campo_cf_final,) + CAMPO_CF_FINAL_CANDIDATOS,
+            exclude_names=(campo_riesgo,),
         )
         if idx_cf_final == -1:
             idx_cf_final = _find_field_index(
-                fields, (), partial_tokens=("cf", "final"), exclude_names=(CAMPO_RIESGO,)
+                fields, (), partial_tokens=("cf", "final"), exclude_names=(campo_riesgo,)
             )
         if idx_cf_final == -1:
-            raise QgsProcessingException("No se encontro el campo CF_Final en Colectores.")
+            raise QgsProcessingException(
+                f"No se encontro el campo '{campo_cf_final}' en Colectores."
+            )
 
         idx_pf = _find_field_index(
-            fields, CAMPO_PF_CANDIDATOS, exclude_names=(CAMPO_RIESGO,)
+            fields,
+            (campo_pf,) + CAMPO_PF_CANDIDATOS,
+            exclude_names=(campo_riesgo,),
         )
         if idx_pf == -1:
             idx_pf = _find_field_index(
-                fields, (), partial_tokens=("pf",), exclude_names=(CAMPO_RIESGO,)
+                fields, (), partial_tokens=("pf",), exclude_names=(campo_riesgo,)
             )
         if idx_pf == -1:
-            raise QgsProcessingException("No se encontro el campo PF en Colectores.")
+            raise QgsProcessingException(
+                f"No se encontro el campo '{campo_pf}' en Colectores."
+            )
 
         feedback.pushInfo(f"Campo CF_Final detectado: {fields.at(idx_cf_final).name()}")
-        feedback.pushInfo(f"Campo PF detectado: {fields.at(idx_pf).name()}")
+        feedback.pushInfo(f"Campo PF detectado      : {fields.at(idx_pf).name()}")
 
-        idx_riesgo = fields.lookupField(CAMPO_RIESGO)
+        idx_riesgo = fields.lookupField(campo_riesgo)
         if idx_riesgo == -1:
             if not capa_colectores.dataProvider().addAttributes(
-                [QgsField(CAMPO_RIESGO, QVariant.Double, len=10, prec=2)]
+                [QgsField(campo_riesgo, QVariant.Double, len=10, prec=2)]
             ):
                 raise QgsProcessingException(
-                    f"No se pudo crear el campo {CAMPO_RIESGO} en Colectores."
+                    f"No se pudo crear el campo '{campo_riesgo}' en Colectores."
                 )
             capa_colectores.updateFields()
-            idx_riesgo = capa_colectores.fields().lookupField(CAMPO_RIESGO)
+            idx_riesgo = capa_colectores.fields().lookupField(campo_riesgo)
             if idx_riesgo == -1:
-                raise QgsProcessingException(f"El campo {CAMPO_RIESGO} no quedo disponible.")
+                raise QgsProcessingException(f"El campo '{campo_riesgo}' no quedo disponible.")
 
         inicio_edicion = False
         if not capa_colectores.isEditable():
@@ -175,7 +218,9 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                     )
             return {OUTPUT_ACTUALIZADAS: 0}
 
-        actualizadas = 0
+        actualizadas     = 0
+        ids_actualizados = []
+        idx_id_col       = _find_field_index(fields, ("ID", "id"))
 
         try:
             for i, feature in enumerate(features, start=1):
@@ -185,11 +230,10 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                 nuevo_riesgo = _calcular_riesgo(feature[idx_cf_final], feature[idx_pf])
                 valor_actual = feature[idx_riesgo]
 
-                # Log de debug para las primeras 5 features
                 if i <= 5:
                     feedback.pushInfo(
-                        f"FID {feature.id()}: CF_Final={feature[idx_cf_final]}, "
-                        f"PF={feature[idx_pf]} -> Riesgo={nuevo_riesgo} (actual: {valor_actual})"
+                        f"FID {feature.id()}: {campo_cf_final}={feature[idx_cf_final]}, "
+                        f"{campo_pf}={feature[idx_pf]} -> {campo_riesgo}={nuevo_riesgo} (actual: {valor_actual})"
                     )
 
                 if valor_actual != nuevo_riesgo or valor_actual is None:
@@ -197,9 +241,11 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                         feature.id(), idx_riesgo, nuevo_riesgo
                     ):
                         raise QgsProcessingException(
-                            f"No se pudo actualizar {CAMPO_RIESGO} en FID {feature.id()}."
+                            f"No se pudo actualizar '{campo_riesgo}' en FID {feature.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(100.0 * i / total)
 
@@ -216,4 +262,10 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                 capa_colectores.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas}

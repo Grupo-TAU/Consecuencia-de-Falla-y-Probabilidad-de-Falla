@@ -3,21 +3,22 @@ from qgis.core import (
     QgsProcessingAlgorithm,
     QgsProcessingException,
     QgsProcessingOutputNumber,
+    QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
 )
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_PF = "PF"
+CAMPO_PF_DEFAULT                 = "PF"
+CAMPO_PACP_CLASIFICACION_DEFAULT = "PACP_Clasificacion"
 PACP_CLASIFICACION_CANDIDATOS = (
     "PACP_Clasificacion",
-    "PACP_Clasificación",
-    "pacp_clasificacion",
-    "pacp_clasificación",
 )
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES          = "COLECTORES"
+PARAM_CAMPO_PF      = "CAMPO_PF"
+PARAM_CAMPO_PACP    = "CAMPO_PACP"
 OUTPUT_ACTUALIZADAS = "ACTUALIZADAS"
 
 
@@ -116,6 +117,20 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores")
         )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PF,
+                "Nombre campo salida (PF)",
+                defaultValue=CAMPO_PF_DEFAULT,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_CAMPO_PACP,
+                "Nombre campo PACP Clasificacion",
+                defaultValue=CAMPO_PACP_CLASIFICACION_DEFAULT,
+            )
+        )
         self.addOutput(
             QgsProcessingOutputNumber(OUTPUT_ACTUALIZADAS, "Cantidad de colectores actualizados")
         )
@@ -127,14 +142,22 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
         if capa_colectores is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
 
+        campo_pf   = self.parameterAsString(parameters, PARAM_CAMPO_PF,   context).strip() or CAMPO_PF_DEFAULT
+        campo_pacp = self.parameterAsString(parameters, PARAM_CAMPO_PACP, context).strip() or CAMPO_PACP_CLASIFICACION_DEFAULT
+
+        feedback.pushInfo(f"Campo salida (PF)       : {campo_pf}")
+        feedback.pushInfo(f"Campo PACP Clasificacion: {campo_pacp}")
+
         fields = capa_colectores.fields()
 
         idx_pacp = _find_field_index(
-            fields, PACP_CLASIFICACION_CANDIDATOS, exclude_names=(CAMPO_PF,)
+            fields,
+            (campo_pacp,) + PACP_CLASIFICACION_CANDIDATOS,
+            exclude_names=(campo_pf,),
         )
         if idx_pacp == -1:
             idx_pacp = _find_field_index(
-                fields, (), partial_tokens=("pacp",), exclude_names=(CAMPO_PF,)
+                fields, (), partial_tokens=("pacp",), exclude_names=(campo_pf,)
             )
         if idx_pacp == -1:
             raise QgsProcessingException(
@@ -144,18 +167,18 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
 
         feedback.pushInfo(f"Campo PACP detectado: {fields.at(idx_pacp).name()}")
 
-        idx_pf = fields.lookupField(CAMPO_PF)
+        idx_pf = fields.lookupField(campo_pf)
         if idx_pf == -1:
             if not capa_colectores.dataProvider().addAttributes(
-                [QgsField(CAMPO_PF, QVariant.Double, len=10, prec=2)]
+                [QgsField(campo_pf, QVariant.Double, len=10, prec=2)]
             ):
                 raise QgsProcessingException(
-                    f"No se pudo crear el campo {CAMPO_PF} en Colectores."
+                    f"No se pudo crear el campo '{campo_pf}' en Colectores."
                 )
             capa_colectores.updateFields()
-            idx_pf = capa_colectores.fields().lookupField(CAMPO_PF)
+            idx_pf = capa_colectores.fields().lookupField(campo_pf)
             if idx_pf == -1:
-                raise QgsProcessingException(f"El campo {CAMPO_PF} no quedo disponible.")
+                raise QgsProcessingException(f"El campo '{campo_pf}' no quedo disponible.")
 
         inicio_edicion = False
         if not capa_colectores.isEditable():
@@ -177,7 +200,9 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
                     )
             return {OUTPUT_ACTUALIZADAS: 0}
 
-        actualizadas = 0
+        actualizadas     = 0
+        ids_actualizados = []
+        idx_id_col       = _find_field_index(fields, ("ID", "id"))
 
         try:
             for i, feature in enumerate(features, start=1):
@@ -190,9 +215,11 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
                         feature.id(), idx_pf, nueva_pf
                     ):
                         raise QgsProcessingException(
-                            f"No se pudo actualizar {CAMPO_PF} en FID {feature.id()}."
+                            f"No se pudo actualizar '{campo_pf}' en FID {feature.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(100.0 * i / total)
 
@@ -209,4 +236,10 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
                 capa_colectores.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas}

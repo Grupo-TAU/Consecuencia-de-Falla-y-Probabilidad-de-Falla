@@ -338,7 +338,9 @@ class CfProfundidad(QgsProcessingAlgorithm):
                 capa_colectores.commitChanges()
             return {OUTPUT_ACTUALIZADAS: 0}
 
-        actualizadas = 0
+        actualizadas     = 0
+        ids_actualizados = []
+        idx_id_col       = _find_field_index(col_fields, ("ID", "id"))
         try:
             for i, colector in enumerate(colectores_list, start=1):
                 if feedback.isCanceled():
@@ -371,6 +373,8 @@ class CfProfundidad(QgsProcessingAlgorithm):
                             f"No se pudo actualizar {campo_cf_profundidad} en FID {colector.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(colector[idx_id_col]).strip() if idx_id_col != -1 else str(colector.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(100.0 * i / total)
 
@@ -387,4 +391,10 @@ class CfProfundidad(QgsProcessingAlgorithm):
                 capa_colectores.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas}

@@ -363,7 +363,9 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
                 if total:
                     feedback.setProgress(50.0 * i / total)
 
-            actualizadas = 0
+            actualizadas     = 0
+            ids_actualizados = []
+            idx_id_col       = _find_field_index(fields, ("ID", "id"))
             for i, feature in enumerate(features, start=1):
                 if feedback.isCanceled():
                     break
@@ -379,6 +381,8 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
                             f"No se pudo actualizar la entidad con FID {feature.id()} en Colectores."
                         )
                     actualizadas += 1
+                    col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
+                    ids_actualizados.append(col_id)
                 if total:
                     feedback.setProgress(50.0 + (50.0 * i / total))
 
@@ -395,4 +399,10 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
                 colectores_layer.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas}

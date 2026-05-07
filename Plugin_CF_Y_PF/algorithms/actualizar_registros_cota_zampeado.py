@@ -210,5 +210,8 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
         feedback.pushInfo(f"Registros actualizados: {actualizados}")
         if ids_actualizados:
-            feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADOS: actualizados}

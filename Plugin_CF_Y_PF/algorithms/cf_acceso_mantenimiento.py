@@ -392,8 +392,10 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
                 capa_colectores.commitChanges()
             return {OUTPUT_ACTUALIZADAS: 0}
 
-        actualizadas = 0
-        sin_datos    = 0
+        actualizadas     = 0
+        sin_datos        = 0
+        ids_actualizados = []
+        idx_id_col       = _find_field_index(col_fields, ("ID", "id"))
 
         try:
             for i, col in enumerate(colectores_list, start=1):
@@ -423,6 +425,8 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
                             f"No se pudo actualizar '{campo_cf_acceso}' en FID {col.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(col[idx_id_col]).strip() if idx_id_col != -1 else str(col.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(50.0 + 50.0 * i / max(total_col, 1))
 
@@ -444,4 +448,9 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
                 f"Advertencia: {sin_datos} colectores sin datos en ninguno de sus registros."
             )
         feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas}
