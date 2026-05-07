@@ -27,10 +27,11 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         8. CF Antiguedad
         9. CF Material
        10. CF Acceso Mantenimiento
-       11. CF Total
-       12. PF Probabilidad de Falla
-       13. Riesgo
-       14. Aplicar Simbologia
+       11. CF Obstrucciones
+       12. CF Total
+       13. PF Probabilidad de Falla
+       14. Riesgo
+       15. Aplicar Simbologia
     """
 
     COLECTORES           = "COLECTORES"
@@ -189,7 +190,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             if self.parameterAsSource(parameters, param, context) is None:
                 raise QgsProcessingException(f"No se pudo leer la capa {nombre}.")
 
-        total_pasos      = 14
+        total_pasos      = 15
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -322,37 +323,46 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 11: CF Total ──────────────────────────────────────────────────
+        # ── PASO 11: CF Obstrucciones ──────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(11, "CF Total",
+            if _ejecutar(11, "CF Obstrucciones",
+                         f"{PROVIDER_ID}:cf_obstrucciones",
+                         {
+                             "COLECTORES": colectores.id(),
+                         }) is not None:
+                pasos_ok += 1
+
+        # ── PASO 12: CF Total ──────────────────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(12, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 12: PF Probabilidad de Falla ─────────────────────────────────
+        # ── PASO 13: PF Probabilidad de Falla ─────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(12, "PF Probabilidad de Falla",
+            if _ejecutar(13, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 13: Riesgo ────────────────────────────────────────────────────
+        # ── PASO 14: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(13, "Riesgo",
+            if _ejecutar(14, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 14: Aplicar Simbologia ────────────────────────────────────────
+        # ── PASO 15: Aplicar Simbologia ────────────────────────────────────────
         if not feedback.isCanceled():
             campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
-            if _ejecutar(14, "Aplicar Simbologia",
+            if _ejecutar(15, "Aplicar Simbologia",
                          f"{PROVIDER_ID}:aplicar_simbologia",
                          {
                              "COLECTORES": colectores.id(),
