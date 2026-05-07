@@ -106,7 +106,7 @@ class CfTotal(QgsProcessingAlgorithm):
         return (
             "Calcula el CF_Final de cada colector combinando los factores de consecuencia "
             "segun la matriz de ponderacion:\n\n"
-            "  Economico      (30 %): CF_Diametro + CF_Profundidad  [posible: 12]\n"
+            "  Economico      (30 %): CF_Diametro + CF_Profundidad + CF_AccesoMantenimiento  [posible: 18]\n"
             "  Social         (30 %): CF_PosicionRelativa + CF_Prox_ClienteImportante  [posible: 12]\n"
             "  Medioambiental (15 %): CF_Prox_MedioAmbiental  [posible: 6]\n"
             "  Valorizacion   (25 %): CF_Antiguedad + CF_Material + CF_Obstrucciones  [posible: 18]\n\n"

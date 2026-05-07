@@ -67,22 +67,20 @@ def _to_float_or_none(value):
 
 
 def _calcular_riesgo(cf_final, pf):
-    """Calcula el Riesgo como suma de CF_Final + PF."""
+    """Calcula el Riesgo como CF_Final x PF. NULL o 0 se tratan como 1."""
     cf_val = _to_float_or_none(cf_final)
     pf_val = _to_float_or_none(pf)
     if cf_val is None and pf_val is None:
         return None
-    if cf_val is None:
-        return pf_val
-    if pf_val is None:
-        return cf_val
-    return cf_val + pf_val
+    cf_val = cf_val if (cf_val is not None and cf_val != 0.0) else 1.0
+    pf_val = pf_val if (pf_val is not None and pf_val != 0.0) else 1.0
+    return round(cf_val * pf_val, 2)
 
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
 class RiesgoCalculo(QgsProcessingAlgorithm):
-    """Calcula el Riesgo como suma de CF_Final + PF."""
+    """Calcula el Riesgo como CF_Final x PF."""
 
     def name(self):
         return "riesgo_calculo"
@@ -98,9 +96,10 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula el campo Riesgo para cada colector como la suma de "
-            "CF_Final + PF. Si uno de los dos valores es nulo, se usa el otro. "
-            "Si ambos son nulos, el campo queda en NULL."
+            "Calcula el campo Riesgo para cada colector como la multiplicacion "
+            "CF_Final x PF. Si uno de los dos es NULL o 0, se trata como 1 "
+            "(el resultado queda igual al otro valor). "
+            "Si ambos son NULL, el campo queda en NULL."
         )
 
     def createInstance(self):
