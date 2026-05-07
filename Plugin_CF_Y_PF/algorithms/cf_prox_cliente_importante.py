@@ -35,11 +35,11 @@ RANGOS_BUFFER_DEFAULT = [
     (800.0, 2),
 ]
 PALETA_VERDES = {
-    300.0:  "#005a32",
-    1500.0: "#238b45",
-    3000.0: "#41ab5d",
-    4500.0: "#74c476",
-    6100.0: "#c7e9c0",
+    50.0:  "#005a32",
+    100.0: "#238b45",
+    200.0: "#41ab5d",
+    400.0: "#74c476",
+    800.0: "#c7e9c0",
 }
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
@@ -316,7 +316,10 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
         ops       = 0
         cancelado = False
 
-        actualizadas = 0
+        actualizadas     = 0
+        _fn_lin          = {capa_lineas.fields().at(i).name().lower(): i for i in range(capa_lineas.fields().count())}
+        idx_id_col       = _fn_lin.get("id", -1)
+        ids_actualizados = []
         try:
             for distancia, clase in rangos_ordenados:
                 if len(intersectados_globales) >= total_lineas_intersectables:
@@ -370,6 +373,8 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
                             f"No se pudo actualizar {campo_clasificacion} en FID {linea.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(linea[idx_id_col]).strip() if idx_id_col != -1 else str(linea.id())
+                    ids_actualizados.append(col_id)
                 feedback.setProgress(70.0 + (30.0 * i / total))
 
             if inicio_edicion:
@@ -385,4 +390,10 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
                 capa_lineas.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         return {OUTPUT_ACTUALIZADAS: actualizadas, BUFFERS_VISIBLES: sink_buffers_id}

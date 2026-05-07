@@ -474,7 +474,10 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
             feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
             if ids_actualizados:
-                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+                if len(ids_actualizados) <= 50:
+                    feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+                else:
+                    feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
 
             if inicio_edicion:
                 if not colectores_layer.commitChanges():

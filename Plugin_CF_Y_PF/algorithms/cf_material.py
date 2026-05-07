@@ -209,7 +209,9 @@ class CfMaterial(QgsProcessingAlgorithm):
                 capa.commitChanges()
             return {OUTPUT_ACTUALIZADAS: 0}
 
-        actualizadas = 0
+        actualizadas     = 0
+        ids_actualizados = []
+        idx_id_col       = _find_field_index(capa.fields(), "ID")
         try:
             for i, feature in enumerate(features, start=1):
                 if feedback.isCanceled():
@@ -229,6 +231,8 @@ class CfMaterial(QgsProcessingAlgorithm):
                             f"No se pudo actualizar '{campo_salida}' en FID {feature.id()}."
                         )
                     actualizadas += 1
+                    col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
+                    ids_actualizados.append(col_id)
 
                 feedback.setProgress(100.0 * i / total)
 
@@ -245,6 +249,12 @@ class CfMaterial(QgsProcessingAlgorithm):
                 capa.rollBack()
             raise
 
+        feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
+        if ids_actualizados:
+            if len(ids_actualizados) <= 50:
+                feedback.pushInfo("IDs actualizados: " + ", ".join(ids_actualizados))
+            else:
+                feedback.pushInfo("(Demasiados IDs para listar, ver conteo arriba)")
         if no_reconocidos:
             feedback.pushWarning(
                 "Materiales no reconocidos (quedan con clase 0): "
