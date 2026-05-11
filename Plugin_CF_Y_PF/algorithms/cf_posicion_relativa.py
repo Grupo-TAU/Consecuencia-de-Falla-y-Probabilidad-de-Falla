@@ -11,9 +11,11 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-PENDIENTE_CANDIDATOS_DEFAULT      = ("Pendiente",)
+PENDIENTE_CANDIDATOS_DEFAULT        = ("Pendiente",)
 REGISTRO_INICIAL_CANDIDATOS_DEFAULT = ("Registro_Inicial",)
 REGISTRO_FINAL_CANDIDATOS_DEFAULT   = ("Registro_Final",)
+INSPECCION_CANDIDATOS_DEFAULT       = ("Inspeccion",)
+INSPECCION_CORTE_VALORES            = {"AL", "EB"}
 CAMPO_POS_REL_DEFAULT               = "posicionRelativa"
 CAMPO_POS_REL_CLAS_DEFAULT          = "CF_PosicionRelativa"
 RANGO_POS_REL_DEFAULT               = (10.0, 30.0, 70.0, 120.0, 150.0)
@@ -290,9 +292,18 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
             total          = len(features)
             feature_by_id  = {f.id(): f for f in features}
 
+            idx_inspeccion = _find_field_index(fields, INSPECCION_CANDIDATOS_DEFAULT)
+            if idx_inspeccion == -1:
+                feedback.pushInfo(
+                    "Campo 'Inspeccion' no encontrado: no se aplicara corte por AL/EB."
+                )
+            else:
+                feedback.pushInfo("Campo 'Inspeccion' encontrado: se aplicara corte por AL/EB.")
+
             start_node          = {}
             end_node            = {}
             pendiente           = {}
+            inspeccion_val      = {}
             start_to_segments   = {}
             end_to_segments     = {}
 
@@ -303,10 +314,19 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
                 start_node[fid]  = nodo_inicio
                 end_node[fid]    = nodo_final
                 pendiente[fid]   = abs(_to_float(feature[pendiente_idx]))
+                if idx_inspeccion != -1:
+                    raw = feature[idx_inspeccion]
+                    inspeccion_val[fid] = str(raw).strip().upper() if raw is not None else ""
+                else:
+                    inspeccion_val[fid] = ""
                 if nodo_inicio:
                     start_to_segments.setdefault(nodo_inicio, []).append(fid)
                 if nodo_final:
                     end_to_segments.setdefault(nodo_final, []).append(fid)
+
+            corte_fids = {fid for fid, val in inspeccion_val.items() if val in INSPECCION_CORTE_VALORES}
+            if corte_fids:
+                feedback.pushInfo(f"Colectores con corte (AL/EB): {len(corte_fids)}")
 
             incoming_by_seg       = {fid: [] for fid in feature_by_id}
             outgoing_same_start   = {fid: [] for fid in feature_by_id}
@@ -327,6 +347,10 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
             def calcular_posicion(fid, stack):
                 if fid in memo:
                     return memo[fid]
+                # AL/EB: corte de sumatoria — no tiene posicion relativa y no la propaga
+                if fid in corte_fids:
+                    memo[fid] = 0
+                    return 0
                 if fid in stack:
                     return 1
                 stack.add(fid)
