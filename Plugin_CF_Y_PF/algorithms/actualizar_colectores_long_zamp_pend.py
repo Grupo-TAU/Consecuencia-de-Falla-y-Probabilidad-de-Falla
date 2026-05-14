@@ -25,7 +25,8 @@ def _find_field_index(fields, candidates):
 def _normalize_node(value):
     if value is None:
         return ""
-    return str(value).strip()
+    s = str(value).strip()
+    return "" if s.upper() == "NULL" else s
 
 
 def _to_float_or_none(value):
@@ -36,7 +37,9 @@ def _to_float_or_none(value):
 
 
 def _is_null(value):
-    return value is None
+    if value is None:
+        return True
+    return str(value).strip().upper() == "NULL"
 
 
 def _endpoints(geom):
@@ -48,6 +51,25 @@ def _endpoints(geom):
         QgsPointXY(vertices[0].x(),  vertices[0].y()),
         QgsPointXY(vertices[-1].x(), vertices[-1].y()),
     )
+
+
+def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20, field_prec=6):
+    """Agrega un campo a la capa y devuelve (idx, fields_actualizados)."""
+    if not layer.dataProvider().addAttributes(
+        [QgsField(field_name, variant_type, len=field_len, prec=field_prec)]
+    ):
+        raise QgsProcessingException(
+            f"No se pudo crear el campo '{field_name}' en Colectores."
+        )
+    layer.updateFields()
+    fields = layer.fields()
+    idx = _find_field_index(fields, (field_name,))
+    if idx == -1:
+        raise QgsProcessingException(
+            f"El campo '{field_name}' no quedo disponible en Colectores."
+        )
+    feedback.pushInfo(f"Se creo el campo '{field_name}' en Colectores.")
+    return idx, fields
 
 
 # ── Defaults de campos ────────────────────────────────────────────────────────
@@ -232,29 +254,47 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         colectores_fields = colectores_layer.fields()
         registros_fields  = registros_source.fields()
 
-        # Si Longitud no existe, la crea automaticamente como campo Double.
         idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
         if idx_longitud == -1:
-            if not colectores_layer.dataProvider().addAttributes(
-                [QgsField(campo_longitud, QVariant.Double, len=20, prec=2)]
-            ):
-                raise QgsProcessingException(
-                    f"No se pudo crear el campo '{campo_longitud}' en Colectores."
-                )
-            colectores_layer.updateFields()
-            colectores_fields = colectores_layer.fields()
-            idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
-            if idx_longitud == -1:
-                raise QgsProcessingException(
-                    f"El campo '{campo_longitud}' no quedo disponible en Colectores."
-                )
-            feedback.pushInfo(f"Se creo el campo '{campo_longitud}' en Colectores.")
+            idx_longitud, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_longitud, QVariant.Double, feedback,
+                field_len=20, field_prec=2,
+            )
 
-        idx_reg_ini   = _find_field_index(colectores_fields, (campo_reg_ini,))
-        idx_reg_fin   = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
-        idx_cota_ini  = _find_field_index(colectores_fields, (campo_cota_ini,))
-        idx_cota_fin  = _find_field_index(colectores_fields, (campo_cota_fin,))
+        idx_reg_ini = _find_field_index(colectores_fields, (campo_reg_ini,))
+        if idx_reg_ini == -1:
+            idx_reg_ini, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_reg_ini, QVariant.String, feedback,
+                field_len=100, field_prec=0,
+            )
+
+        idx_reg_fin = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
+        if idx_reg_fin == -1:
+            idx_reg_fin, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_reg_fin, QVariant.String, feedback,
+                field_len=100, field_prec=0,
+            )
+
+        idx_cota_ini = _find_field_index(colectores_fields, (campo_cota_ini,))
+        if idx_cota_ini == -1:
+            idx_cota_ini, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_cota_ini, QVariant.Double, feedback,
+                field_len=20, field_prec=6,
+            )
+
+        idx_cota_fin = _find_field_index(colectores_fields, (campo_cota_fin,))
+        if idx_cota_fin == -1:
+            idx_cota_fin, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_cota_fin, QVariant.Double, feedback,
+                field_len=20, field_prec=6,
+            )
+
         idx_pendiente = _find_field_index(colectores_fields, (campo_pendiente, "Slope", "slope"))
+        if idx_pendiente == -1:
+            idx_pendiente, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_pendiente, QVariant.Double, feedback,
+                field_len=20, field_prec=6,
+            )
 
         idx_id_col          = _find_field_index(colectores_fields, ("ID", "id"))
         idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
@@ -272,19 +312,13 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             )
 
         required = {
-            campo_reg_ini:   idx_reg_ini,
-            campo_reg_fin:   idx_reg_fin,
-            campo_cota_ini:  idx_cota_ini,
-            campo_cota_fin:  idx_cota_fin,
-            campo_longitud:  idx_longitud,
-            campo_pendiente: idx_pendiente,
             campo_id_reg:    idx_id_reg,
             campo_cota_zamp: idx_cota_reg,
         }
         missing = [name for name, idx in required.items() if idx == -1]
         if missing:
             raise QgsProcessingException(
-                "Faltan columnas requeridas: " + ", ".join(missing)
+                "Faltan columnas requeridas en Registros: " + ", ".join(missing)
             )
 
         # ── Inicio de edicion unico para todo el algoritmo ─────────────────────
