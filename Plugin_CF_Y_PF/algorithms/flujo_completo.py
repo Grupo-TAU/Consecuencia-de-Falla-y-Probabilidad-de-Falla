@@ -17,21 +17,22 @@ class FlujoCompleto(QgsProcessingAlgorithm):
     """
     Ejecuta todos los algoritmos de clasificacion y riesgo en el orden correcto:
 
-        1. Actualizar Registros
-        2. Actualizar Colectores
-        3. CF Diametro
-        4. CF Posicion Relativa
-        5. CF Profundidad
-        6. CF Prox Cliente Importante
-        7. CF Prox Medio Ambiental
-        8. CF Antiguedad
-        9. CF Material
-       10. CF Acceso Mantenimiento
-       11. CF Obstrucciones
-       12. CF Total
-       13. PF Probabilidad de Falla
-       14. Riesgo
-       15. Aplicar Simbologia
+        1. Asignar Registro Inicial y Final en Colectores
+        2. Actualizar Registros - Cota Zampeado (Mecanica 1 + Mecanica 2)
+        3. Actualizar Colectores Longitud, Cota Zampeado y Pendiente
+        4. CF Diametro
+        5. CF Posicion Relativa
+        6. CF Profundidad
+        7. CF Prox Cliente Importante
+        8. CF Prox Medio Ambiental
+        9. CF Antiguedad
+       10. CF Material
+       11. CF Acceso Mantenimiento
+       12. CF Obstrucciones
+       13. CF Total
+       14. PF Probabilidad de Falla
+       15. Riesgo
+       16. Aplicar Simbologia
     """
 
     COLECTORES           = "COLECTORES"
@@ -190,7 +191,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             if self.parameterAsSource(parameters, param, context) is None:
                 raise QgsProcessingException(f"No se pudo leer la capa {nombre}.")
 
-        total_pasos      = 15
+        total_pasos      = 16
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -216,17 +217,28 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                     f"Error en el paso '{nombre}' ({alg_id}): {e}"
                 )
 
-        # ── PASO 1: Actualizar Registros ──────────────────────────────────────
-        if _ejecutar(1, "Actualizar Registros",
-                     f"{PROVIDER_ID}:actualizar_registros_cota_zampeado",
+        # ── PASO 1: Asignar Registro Inicial y Final ──────────────────────────
+        if _ejecutar(1, "Asignar Registro Inicial y Final",
+                     f"{PROVIDER_ID}:asignar_registros_colectores",
                      {
-                         "REGISTROS": registros.id(),
+                         "COLECTORES": colectores.id(),
+                         "REGISTROS":  registros.id(),
                      }) is not None:
             pasos_ok += 1
 
-        # ── PASO 2: Actualizar Colectores ──────────────────────────────────────
+        # ── PASO 2: Actualizar Registros - Cota Zampeado ──────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(2, "Actualizar Colectores",
+            if _ejecutar(2, "Actualizar Registros - Cota Zampeado",
+                         f"{PROVIDER_ID}:actualizar_registros_cota_zampeado",
+                         {
+                             "REGISTROS":   registros.id(),
+                             "COLECTORES":  colectores.id(),
+                         }) is not None:
+                pasos_ok += 1
+
+        # ── PASO 3: Actualizar Colectores ─────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(3, "Actualizar Colectores",
                          f"{PROVIDER_ID}:actualizar_colectores_long_zamp_pend",
                          {
                              "COLECTORES": colectores.id(),
@@ -234,28 +246,28 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 3: CF Diametro ────────────────────────────────────────────────
+        # ── PASO 4: CF Diametro ────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(3, "CF Diametro",
+            if _ejecutar(4, "CF Diametro",
                          f"{PROVIDER_ID}:cf_diametro",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 4: CF Posicion Relativa ───────────────────────────────────────
+        # ── PASO 5: CF Posicion Relativa ───────────────────────────────────────
         # El parametro de capa se llama "Colectores" (mayuscula) en ese algoritmo.
         if not feedback.isCanceled():
-            if _ejecutar(4, "CF Posicion Relativa",
+            if _ejecutar(5, "CF Posicion Relativa",
                          f"{PROVIDER_ID}:calculo_posicion_relativa",
                          {
                              "Colectores": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 5: CF Profundidad ─────────────────────────────────────────────
+        # ── PASO 6: CF Profundidad ─────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(5, "CF Profundidad",
+            if _ejecutar(6, "CF Profundidad",
                          f"{PROVIDER_ID}:cf_profundidad",
                          {
                              "COLECTORES": colectores.id(),
@@ -263,53 +275,53 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 6: CF Prox Cliente Importante ────────────────────────────────
+        # ── PASO 7: CF Prox Cliente Importante ────────────────────────────────
         if not feedback.isCanceled():
-            res6 = _ejecutar(6, "CF Prox Cliente Importante",
+            res7 = _ejecutar(7, "CF Prox Cliente Importante",
                              f"{PROVIDER_ID}:CF_Prox_ClienteImportante",
                              {
-                                 "COLECTORES":          colectores.id(),
+                                 "COLECTORES":           colectores.id(),
                                  "CLIENTES_IMPORTANTES": parameters[self.CLIENTES_IMPORTANTES],
                                  "BUFFERS_VISIBLES":     parameters[self.BUFFERS_CLIENTES],
                              })
-            if res6 is not None:
-                buffers_clientes_id = res6.get("BUFFERS_VISIBLES")
+            if res7 is not None:
+                buffers_clientes_id = res7.get("BUFFERS_VISIBLES")
                 pasos_ok += 1
 
-        # ── PASO 7: CF Prox Medio Ambiental ───────────────────────────────────
+        # ── PASO 8: CF Prox Medio Ambiental ───────────────────────────────────
         if not feedback.isCanceled():
-            res7 = _ejecutar(7, "CF Prox Medio Ambiental",
+            res8 = _ejecutar(8, "CF Prox Medio Ambiental",
                              f"{PROVIDER_ID}:CF_Prox_MedioAmbiental",
                              {
                                  "COLECTORES":       colectores.id(),
                                  "CURSOS_AGUA":      parameters[self.CURSOS_AGUA],
                                  "BUFFERS_VISIBLES": parameters[self.BUFFERS_AGUA],
                              })
-            if res7 is not None:
-                buffers_agua_id = res7.get("BUFFERS_VISIBLES")
+            if res8 is not None:
+                buffers_agua_id = res8.get("BUFFERS_VISIBLES")
                 pasos_ok += 1
 
-        # ── PASO 8: CF Antiguedad ─────────────────────────────────────────────
+        # ── PASO 9: CF Antiguedad ─────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(8, "CF Antiguedad",
+            if _ejecutar(9, "CF Antiguedad",
                          f"{PROVIDER_ID}:cf_antiguedad",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 9: CF Material ───────────────────────────────────────────────
+        # ── PASO 10: CF Material ──────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(9, "CF Material",
+            if _ejecutar(10, "CF Material",
                          f"{PROVIDER_ID}:cf_material",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 10: CF Acceso Mantenimiento ──────────────────────────────────
+        # ── PASO 11: CF Acceso Mantenimiento ──────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(10, "CF Acceso Mantenimiento",
+            if _ejecutar(11, "CF Acceso Mantenimiento",
                          f"{PROVIDER_ID}:cf_acceso_mantenimiento",
                          {
                              "COLECTORES":          colectores.id(),
@@ -323,46 +335,46 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 11: CF Obstrucciones ──────────────────────────────────────────
+        # ── PASO 12: CF Obstrucciones ──────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(11, "CF Obstrucciones",
+            if _ejecutar(12, "CF Obstrucciones",
                          f"{PROVIDER_ID}:cf_obstrucciones",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 12: CF Total ──────────────────────────────────────────────────
+        # ── PASO 13: CF Total ──────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(12, "CF Total",
+            if _ejecutar(13, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 13: PF Probabilidad de Falla ─────────────────────────────────
+        # ── PASO 14: PF Probabilidad de Falla ─────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(13, "PF Probabilidad de Falla",
+            if _ejecutar(14, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 14: Riesgo ────────────────────────────────────────────────────
+        # ── PASO 15: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(14, "Riesgo",
+            if _ejecutar(15, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 15: Aplicar Simbologia ────────────────────────────────────────
+        # ── PASO 16: Aplicar Simbologia ────────────────────────────────────────
         if not feedback.isCanceled():
             campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
-            if _ejecutar(15, "Aplicar Simbologia",
+            if _ejecutar(16, "Aplicar Simbologia",
                          f"{PROVIDER_ID}:aplicar_simbologia",
                          {
                              "COLECTORES": colectores.id(),
