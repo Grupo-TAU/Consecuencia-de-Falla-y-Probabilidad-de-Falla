@@ -109,10 +109,12 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             "  2. Actualizar Registros - Cota Zampeado\n\n"
             "Este algoritmo (paso 3):\n"
             "  - Actualiza Longitud desde la geometria.\n"
-            "  - Copia Cota_Zampeado_Calculada de cada Registro hacia\n"
-            "    Registro_Inicial_Cota_Zampeado y Registro_Final_Cota_Zampeado\n"
-            "    (solo si estan en NULL).\n"
-            "  - Recalcula Pendiente = (Cota_Ini - Cota_Fin) / Longitud * 100."
+            "  - Copia Cota_Zampeado_Calculada de cada Registro hacia los campos\n"
+            "    de cota ini/fin del colector (solo si estan en NULL).\n"
+            "    Si los campos de cota estan vacios o no se provee Registros,\n"
+            "    se omite el copiado y se usa lo que ya haya en el campo.\n"
+            "  - Recalcula Pendiente = (Cota_Ini - Cota_Fin) / Longitud * 100.\n"
+            "    Si alguna de las cotas es 0, Pendiente = 0."
         )
 
     def createInstance(self):
@@ -125,7 +127,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores")
         )
         self.addParameter(
-            QgsProcessingParameterFeatureSource(REGISTROS, "Capa Registros")
+            QgsProcessingParameterFeatureSource(REGISTROS, "Capa Registros", optional=True)
         )
         # ── Campos Colectores ──────────────────────────────────────────────────
         self.addParameter(
@@ -148,13 +150,15 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_COTA_INI, "Campo Registro Inicial Cota Zampeado (Colectores)",
+                PARAM_CAMPO_COTA_INI,
+                "Campo Cota Inicial (Colectores)",
                 defaultValue=CAMPO_COTA_INI_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_COTA_FIN, "Campo Registro Final Cota Zampeado (Colectores)",
+                PARAM_CAMPO_COTA_FIN,
+                "Campo Cota Final (Colectores)",
                 defaultValue=CAMPO_COTA_FIN_DEFAULT,
             )
         )
@@ -203,26 +207,28 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
         if colectores_layer is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
-        if registros_source is None:
-            raise QgsProcessingException("No se pudo leer la capa Registros.")
 
         def _param(key, default):
             v = self.parameterAsString(parameters, key, context).strip()
             return v or default
 
-        campo_longitud    = _param(PARAM_CAMPO_LONGITUD,    CAMPO_LONGITUD_DEFAULT)
-        campo_reg_ini     = _param(PARAM_CAMPO_REG_INI,     CAMPO_REG_INI_DEFAULT)
-        campo_reg_fin     = _param(PARAM_CAMPO_REG_FIN,     CAMPO_REG_FIN_DEFAULT)
-        campo_cota_ini    = _param(PARAM_CAMPO_COTA_INI,    CAMPO_COTA_INI_DEFAULT)
-        campo_cota_fin    = _param(PARAM_CAMPO_COTA_FIN,    CAMPO_COTA_FIN_DEFAULT)
-        campo_pendiente   = _param(PARAM_CAMPO_PENDIENTE,   CAMPO_PENDIENTE_DEFAULT)
+        campo_longitud    = _param(PARAM_CAMPO_LONGITUD,  CAMPO_LONGITUD_DEFAULT)
+        campo_reg_ini     = _param(PARAM_CAMPO_REG_INI,   CAMPO_REG_INI_DEFAULT)
+        campo_reg_fin     = _param(PARAM_CAMPO_REG_FIN,   CAMPO_REG_FIN_DEFAULT)
+        campo_pendiente   = _param(PARAM_CAMPO_PENDIENTE, CAMPO_PENDIENTE_DEFAULT)
         campo_prof_salto  = (self.parameterAsString(parameters, PARAM_CAMPO_PROF_SALTO, context) or "").strip()
-        campo_id_reg      = _param(PARAM_CAMPO_ID_REG,      CAMPO_ID_REG_DEFAULT)
-        campo_cota_zamp   = _param(PARAM_CAMPO_COTA_ZAMP,   CAMPO_COTA_ZAMP_DEFAULT)
+        campo_id_reg      = _param(PARAM_CAMPO_ID_REG,    CAMPO_ID_REG_DEFAULT)
+        campo_cota_zamp   = _param(PARAM_CAMPO_COTA_ZAMP, CAMPO_COTA_ZAMP_DEFAULT)
         campo_prof_inspec = _param(PARAM_CAMPO_PROF_INSPEC, CAMPO_PROF_INSPEC_DEFAULT)
+        campo_cota_ini = _param(PARAM_CAMPO_COTA_INI, CAMPO_COTA_INI_DEFAULT)
+        campo_cota_fin = _param(PARAM_CAMPO_COTA_FIN, CAMPO_COTA_FIN_DEFAULT)
+
+        # can_copy_cotas: requiere capa Registros (los campos siempre estan presentes)
+        can_copy_cotas = registros_source is not None
+        if not can_copy_cotas:
+            feedback.pushInfo("Capa Registros no proporcionada — se omite copiado de cotas.")
 
         colectores_fields = colectores_layer.fields()
-        registros_fields  = registros_source.fields()
 
         # ── Campos Colectores: auto-crear si no existen ────────────────────────
         idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
@@ -232,20 +238,6 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 field_len=20, field_prec=2,
             )
 
-        idx_cota_ini = _find_field_index(colectores_fields, (campo_cota_ini,))
-        if idx_cota_ini == -1:
-            idx_cota_ini, colectores_fields = _add_field_to_layer(
-                colectores_layer, campo_cota_ini, QVariant.Double, feedback,
-                field_len=20, field_prec=6,
-            )
-
-        idx_cota_fin = _find_field_index(colectores_fields, (campo_cota_fin,))
-        if idx_cota_fin == -1:
-            idx_cota_fin, colectores_fields = _add_field_to_layer(
-                colectores_layer, campo_cota_fin, QVariant.Double, feedback,
-                field_len=20, field_prec=6,
-            )
-
         idx_pendiente = _find_field_index(colectores_fields, (campo_pendiente, "Slope", "slope"))
         if idx_pendiente == -1:
             idx_pendiente, colectores_fields = _add_field_to_layer(
@@ -253,58 +245,72 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 field_len=20, field_prec=6,
             )
 
-        # ── Campos Colectores: requeridos (deben existir del paso anterior) ────
+        # Cota ini/fin: buscar siempre (para leer en pendiente); crear solo si se va a copiar
+        idx_cota_ini = _find_field_index(colectores_fields, (campo_cota_ini,)) if campo_cota_ini else -1
+        idx_cota_fin = _find_field_index(colectores_fields, (campo_cota_fin,)) if campo_cota_fin else -1
+
+        if can_copy_cotas:
+            if idx_cota_ini == -1:
+                idx_cota_ini, colectores_fields = _add_field_to_layer(
+                    colectores_layer, campo_cota_ini, QVariant.Double, feedback,
+                    field_len=20, field_prec=6,
+                )
+            if idx_cota_fin == -1:
+                idx_cota_fin, colectores_fields = _add_field_to_layer(
+                    colectores_layer, campo_cota_fin, QVariant.Double, feedback,
+                    field_len=20, field_prec=6,
+                )
+
+        # Reg ini/fin: requeridos solo si se va a copiar cotas
         idx_reg_ini = _find_field_index(colectores_fields, (campo_reg_ini,))
         idx_reg_fin = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
-        for nombre, idx in [(campo_reg_ini, idx_reg_ini), (campo_reg_fin, idx_reg_fin)]:
-            if idx == -1:
-                raise QgsProcessingException(
-                    f"No se encontro el campo '{nombre}' en Colectores. "
-                    "Ejecute primero 'Asignar Registro Inicial y Final en Colectores'."
-                )
+        if can_copy_cotas:
+            for nombre, idx in [(campo_reg_ini, idx_reg_ini), (campo_reg_fin, idx_reg_fin)]:
+                if idx == -1:
+                    raise QgsProcessingException(
+                        f"No se encontro el campo '{nombre}' en Colectores. "
+                        "Ejecute primero 'Asignar Registro Inicial y Final en Colectores'."
+                    )
 
         idx_id_col         = _find_field_index(colectores_fields, ("ID", "id"))
         idx_prof_salto_col = (
             _find_field_index(colectores_fields, (campo_prof_salto,))
             if campo_prof_salto else -1
         )
-        if idx_prof_salto_col == -1:
+        if idx_prof_salto_col == -1 and campo_prof_salto:
             feedback.pushInfo(
                 f"Campo '{campo_prof_salto}' no encontrado en Colectores — no se aplicara ajuste de salto."
-                if campo_prof_salto else
-                "Campo Prof_Salto no configurado — no se aplicara ajuste de salto."
             )
 
-        # ── Campos Registros: requeridos ───────────────────────────────────────
-        idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
-        idx_cota_reg        = _find_field_index(registros_fields, (campo_cota_zamp,))
-        idx_prof_inspec_reg = _find_field_index(registros_fields, (campo_prof_inspec,))
-
-        for nombre, idx in [(campo_id_reg, idx_id_reg), (campo_cota_zamp, idx_cota_reg)]:
-            if idx == -1:
-                raise QgsProcessingException(
-                    f"No se encontro el campo '{nombre}' en Registros."
-                )
-
-        # ── Construir mapas de lookup desde Registros ──────────────────────────
+        # ── Construir mapas de lookup desde Registros (solo si aplica) ─────────
         mapa_cota        = {}
         mapa_prof_inspec = {}
 
-        for reg_feat in registros_source.getFeatures():
-            reg_id_val = _normalize_node(reg_feat[idx_id_reg])
-            if not reg_id_val:
-                continue
-            cota = _to_float_or_none(reg_feat[idx_cota_reg])
-            if cota is not None and reg_id_val not in mapa_cota:
-                mapa_cota[reg_id_val] = cota
-            if idx_prof_inspec_reg != -1:
-                prof = _to_float_or_none(reg_feat[idx_prof_inspec_reg])
-                if prof is not None and reg_id_val not in mapa_prof_inspec:
-                    mapa_prof_inspec[reg_id_val] = prof
+        if can_copy_cotas:
+            registros_fields  = registros_source.fields()
+            idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
+            idx_cota_reg        = _find_field_index(registros_fields, (campo_cota_zamp,))
+            idx_prof_inspec_reg = _find_field_index(registros_fields, (campo_prof_inspec,))
 
-        feedback.pushInfo(
-            f"Registros con cota zampeado disponible: {len(mapa_cota)}"
-        )
+            for nombre, idx in [(campo_id_reg, idx_id_reg), (campo_cota_zamp, idx_cota_reg)]:
+                if idx == -1:
+                    raise QgsProcessingException(
+                        f"No se encontro el campo '{nombre}' en Registros."
+                    )
+
+            for reg_feat in registros_source.getFeatures():
+                reg_id_val = _normalize_node(reg_feat[idx_id_reg])
+                if not reg_id_val:
+                    continue
+                cota = _to_float_or_none(reg_feat[idx_cota_reg])
+                if cota is not None and reg_id_val not in mapa_cota:
+                    mapa_cota[reg_id_val] = cota
+                if idx_prof_inspec_reg != -1:
+                    prof = _to_float_or_none(reg_feat[idx_prof_inspec_reg])
+                    if prof is not None and reg_id_val not in mapa_prof_inspec:
+                        mapa_prof_inspec[reg_id_val] = prof
+
+            feedback.pushInfo(f"Registros con cota zampeado disponible: {len(mapa_cota)}")
 
         # ── Inicio de edicion ──────────────────────────────────────────────────
         inicio_edicion = False
@@ -325,8 +331,6 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 if feedback.isCanceled():
                     break
 
-                reg_ini      = _normalize_node(feature[idx_reg_ini])
-                reg_fin      = _normalize_node(feature[idx_reg_fin])
                 hubo_cambios = False
 
                 geom = feature.geometry()
@@ -337,32 +341,43 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                         feature[idx_longitud] = longitud_calc
                         hubo_cambios = True
 
-                if _is_null(feature[idx_cota_ini]):
-                    cota_ini = mapa_cota.get(reg_ini)
-                    if cota_ini is not None:
-                        feature[idx_cota_ini] = cota_ini
-                        hubo_cambios = True
+                if can_copy_cotas:
+                    reg_ini = _normalize_node(feature[idx_reg_ini])
+                    reg_fin = _normalize_node(feature[idx_reg_fin])
 
-                cota_fin_recien_copiada = False
-                if _is_null(feature[idx_cota_fin]):
-                    cota_fin = mapa_cota.get(reg_fin)
-                    if cota_fin is not None:
-                        feature[idx_cota_fin] = cota_fin
-                        hubo_cambios = True
-                        cota_fin_recien_copiada = True
+                    if idx_cota_ini != -1 and (
+                        _is_null(feature[idx_cota_ini])
+                        or _to_float_or_none(feature[idx_cota_ini]) == 0
+                    ):
+                        cota_ini = mapa_cota.get(reg_ini)
+                        if cota_ini is not None:
+                            feature[idx_cota_ini] = cota_ini
+                            hubo_cambios = True
 
-                if cota_fin_recien_copiada and idx_prof_salto_col != -1:
-                    prof_salto      = _to_float_or_none(feature[idx_prof_salto_col])
-                    prof_inspec_fin = mapa_prof_inspec.get(reg_fin)
-                    if prof_salto is not None and prof_inspec_fin is not None:
-                        feature[idx_cota_fin] = round(
-                            _to_float_or_none(feature[idx_cota_fin])
-                            + (prof_inspec_fin - prof_salto), 2
-                        )
-                        hubo_cambios = True
+                    cota_fin_recien_copiada = False
+                    if idx_cota_fin != -1 and (
+                        _is_null(feature[idx_cota_fin])
+                        or _to_float_or_none(feature[idx_cota_fin]) == 0
+                    ):
+                        cota_fin = mapa_cota.get(reg_fin)
+                        if cota_fin is not None:
+                            feature[idx_cota_fin] = cota_fin
+                            hubo_cambios = True
+                            cota_fin_recien_copiada = True
 
-                cota_ini_val = _to_float_or_none(feature[idx_cota_ini])
-                cota_fin_val = _to_float_or_none(feature[idx_cota_fin])
+                    if cota_fin_recien_copiada and idx_prof_salto_col != -1:
+                        prof_salto      = _to_float_or_none(feature[idx_prof_salto_col])
+                        prof_inspec_fin = mapa_prof_inspec.get(reg_fin)
+                        if prof_salto is not None and prof_inspec_fin is not None:
+                            feature[idx_cota_fin] = round(
+                                _to_float_or_none(feature[idx_cota_fin])
+                                + (prof_inspec_fin - prof_salto), 2
+                            )
+                            hubo_cambios = True
+
+                # Pendiente: usar los valores que haya en los campos (copiados o preexistentes)
+                cota_ini_val = _to_float_or_none(feature[idx_cota_ini]) if idx_cota_ini != -1 else None
+                cota_fin_val = _to_float_or_none(feature[idx_cota_fin]) if idx_cota_fin != -1 else None
                 long_aux_val = _to_float_or_none(feature[idx_longitud])
 
                 if (
@@ -371,9 +386,12 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                     and long_aux_val is not None
                     and abs(long_aux_val) > 1e-12
                 ):
-                    pendiente_calc   = round(
-                        ((cota_ini_val - cota_fin_val) / long_aux_val) * 100.0, 2
-                    )
+                    if cota_ini_val == 0 or cota_fin_val == 0:
+                        pendiente_calc = 0.0
+                    else:
+                        pendiente_calc = round(
+                            ((cota_ini_val - cota_fin_val) / long_aux_val) * 100.0, 2
+                        )
                     pendiente_actual = _to_float_or_none(feature[idx_pendiente])
                     if pendiente_actual is None or round(pendiente_actual, 2) != pendiente_calc:
                         feature[idx_pendiente] = pendiente_calc
