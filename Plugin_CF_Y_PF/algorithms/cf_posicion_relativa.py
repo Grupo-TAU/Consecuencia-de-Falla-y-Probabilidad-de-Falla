@@ -21,14 +21,16 @@ CAMPO_POS_REL_CLAS_DEFAULT          = "CF_PosicionRelativa"
 RANGO_POS_REL_DEFAULT               = (10.0, 30.0, 70.0, 120.0, 150.0)
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES             = "Colectores"
-PARAM_PENDIENTE        = "PENDIENTE"
-PARAM_REG_INI          = "REG_INI"
-PARAM_REG_FIN          = "REG_FIN"
-PARAM_CAMPO_POS_REL    = "CAMPO_POS_REL"
+COLECTORES               = "Colectores"
+PARAM_PENDIENTE          = "PENDIENTE"
+PARAM_REG_INI            = "REG_INI"
+PARAM_REG_FIN            = "REG_FIN"
+PARAM_INSPECCION         = "INSPECCION"
+PARAM_INSPECCION_VALORES = "INSPECCION_VALORES"
+PARAM_CAMPO_POS_REL      = "CAMPO_POS_REL"
 PARAM_CAMPO_POS_REL_CLAS = "CAMPO_POS_REL_CLAS"
-PARAM_RANGO_POS_REL    = "RANGO_POS_REL"
-OUTPUT_ACTUALIZADAS    = "ACTUALIZADAS"
+PARAM_RANGO_POS_REL      = "RANGO_POS_REL"
+OUTPUT_ACTUALIZADAS      = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -155,6 +157,22 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         )
         self.addParameter(
             QgsProcessingParameterString(
+                PARAM_INSPECCION,
+                "Nombre campo inspeccion (tipo de tramo, ej: Inspeccion, TIPOTRA)",
+                defaultValue=",".join(INSPECCION_CANDIDATOS_DEFAULT),
+                optional=True,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_INSPECCION_VALORES,
+                "Valores a ignorar en el campo inspeccion (separados por coma)",
+                defaultValue=",".join(sorted(INSPECCION_CORTE_VALORES)),
+                optional=True,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL,
                 "Nombre campo salida (posicion relativa)",
                 defaultValue=CAMPO_POS_REL_DEFAULT,
@@ -215,9 +233,25 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         rango_str     = self.parameterAsString(parameters, PARAM_RANGO_POS_REL, context)
         rango_pos_rel = _parse_rango_pos_rel(rango_str, RANGO_POS_REL_DEFAULT)
 
+        inspeccion_str = (self.parameterAsString(parameters, PARAM_INSPECCION, context) or "").strip()
+        inspeccion_candidatos = (
+            [c.strip() for c in inspeccion_str.split(",") if c.strip()]
+            if inspeccion_str
+            else list(INSPECCION_CANDIDATOS_DEFAULT)
+        )
+
+        inspeccion_valores_str = (self.parameterAsString(parameters, PARAM_INSPECCION_VALORES, context) or "").strip()
+        inspeccion_corte_valores = (
+            {v.strip().upper() for v in inspeccion_valores_str.split(",") if v.strip()}
+            if inspeccion_valores_str
+            else set(INSPECCION_CORTE_VALORES)
+        )
+
         feedback.pushInfo(f"Campo pendiente configurado: {', '.join(pendiente_candidatos)}")
         feedback.pushInfo(f"Campo registro inicial configurado: {', '.join(reg_ini_candidatos)}")
         feedback.pushInfo(f"Campo registro final configurado: {', '.join(reg_fin_candidatos)}")
+        feedback.pushInfo(f"Campo inspeccion configurado: {', '.join(inspeccion_candidatos)}")
+        feedback.pushInfo(f"Valores de corte configurados: {', '.join(sorted(inspeccion_corte_valores))}")
         feedback.pushInfo(f"Campo salida posicion relativa: {campo_pos_rel}")
         feedback.pushInfo(f"Campo salida CF posicion relativa: {campo_pos_rel_clas}")
         feedback.pushInfo(
@@ -292,13 +326,16 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
             total          = len(features)
             feature_by_id  = {f.id(): f for f in features}
 
-            idx_inspeccion = _find_field_index(fields, INSPECCION_CANDIDATOS_DEFAULT)
+            idx_inspeccion = _find_field_index(fields, inspeccion_candidatos)
+            valores_corte_str = ", ".join(sorted(inspeccion_corte_valores))
             if idx_inspeccion == -1:
                 feedback.pushInfo(
-                    "Campo 'Inspeccion' no encontrado: no se aplicara corte por AL/EB."
+                    f"Campo '{', '.join(inspeccion_candidatos)}' no encontrado: no se aplicara corte por {valores_corte_str}."
                 )
             else:
-                feedback.pushInfo("Campo 'Inspeccion' encontrado: se aplicara corte por AL/EB.")
+                feedback.pushInfo(
+                    f"Campo '{fields.at(idx_inspeccion).name()}' encontrado: se aplicara corte por {valores_corte_str}."
+                )
 
             start_node          = {}
             end_node            = {}
@@ -324,9 +361,9 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
                 if nodo_final:
                     end_to_segments.setdefault(nodo_final, []).append(fid)
 
-            corte_fids = {fid for fid, val in inspeccion_val.items() if val in INSPECCION_CORTE_VALORES}
+            corte_fids = {fid for fid, val in inspeccion_val.items() if val in inspeccion_corte_valores}
             if corte_fids:
-                feedback.pushInfo(f"Colectores con corte (AL/EB): {len(corte_fids)}")
+                feedback.pushInfo(f"Colectores con corte ({valores_corte_str}): {len(corte_fids)}")
 
             incoming_by_seg       = {fid: [] for fid in feature_by_id}
             outgoing_same_start   = {fid: [] for fid in feature_by_id}
