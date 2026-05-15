@@ -20,7 +20,7 @@ CAMPO_ID_REGISTRO            = "ID"
 CAMPO_TIPO_VIA               = "Tipo_Via"
 BUFFER_CALLES_DEFAULT        = 1.0   # metros — punto vs. linea de calle
 
-DESCRIPTORES_CLASE_2 = {"Local mayor", "Autopista/Canal", "Arteria/Edificaciones"}
+DESCRIPTORES_CLASE_2_DEFAULT = {"local mayor", "autopista/canal", "arteria/edificaciones"}
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES                    = "COLECTORES"
@@ -35,7 +35,8 @@ PARAM_CAMPO_CF_ACCESO         = "CAMPO_CF_ACCESO"
 PARAM_CAMPO_REGISTRO_INICIAL  = "CAMPO_REGISTRO_INICIAL"
 PARAM_CAMPO_REGISTRO_FINAL    = "CAMPO_REGISTRO_FINAL"
 PARAM_CAMPO_ID_REGISTRO       = "CAMPO_ID_REGISTRO"
-PARAM_CAMPO_TIPO_VIA           = "CAMPO_TIPO_VIA"
+PARAM_CAMPO_TIPO_VIA          = "CAMPO_TIPO_VIA"
+PARAM_DESCRIPTORES_CLASE_2    = "DESCRIPTORES_CLASE_2"
 PARAM_BUFFER_CALLES           = "BUFFER_CALLES"
 OUTPUT_ACTUALIZADAS           = "ACTUALIZADAS"
 
@@ -112,22 +113,23 @@ def _clasificar_registro(geom_punto,
                           index_peatonal, geom_peatonal,
                           index_verdes,   geom_verdes,
                           index_calles,   geom_calles, attr_calles,
-                          buffer_calles):
-    if _intersecta(geom_punto, index_constr, geom_constr):
+                          buffer_calles,  descriptores_clase_2):
+    if index_constr is not None and _intersecta(geom_punto, index_constr, geom_constr):
         return 6
-    if _intersecta(geom_punto, index_asent, geom_asent):
+    if index_asent is not None and _intersecta(geom_punto, index_asent, geom_asent):
         return 6
-    if _intersecta(geom_punto, index_padrones, geom_padrones):
+    if index_padrones is not None and _intersecta(geom_punto, index_padrones, geom_padrones):
         return 5
-    if _intersecta(geom_punto, index_peatonal, geom_peatonal):
+    if index_peatonal is not None and _intersecta(geom_punto, index_peatonal, geom_peatonal):
         return 4
-    if _intersecta(geom_punto, index_verdes, geom_verdes):
+    if index_verdes is not None and _intersecta(geom_punto, index_verdes, geom_verdes):
         return 3
-    descriptors = _descriptor_calles_en_punto(
-        geom_punto, index_calles, geom_calles, attr_calles, buffer_calles
-    )
-    if descriptors & DESCRIPTORES_CLASE_2:
-        return 2
+    if index_calles is not None:
+        descriptors = _descriptor_calles_en_punto(
+            geom_punto, index_calles, geom_calles, attr_calles, buffer_calles
+        )
+        if descriptors & descriptores_clase_2:
+            return 2
     return 1
 
 
@@ -164,12 +166,12 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
     def initAlgorithm(self, config=None):
         self.addParameter(QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores"))
         self.addParameter(QgsProcessingParameterFeatureSource(REGISTROS, "Capa Registros (puntos)"))
-        self.addParameter(QgsProcessingParameterFeatureSource(CALLES, "Capa Calles"))
-        self.addParameter(QgsProcessingParameterFeatureSource(ESPACIOS_VERDES, "Capa Espacios Verdes (1_Espacios_Verdes)"))
-        self.addParameter(QgsProcessingParameterFeatureSource(ESPACIOS_PEATONALES, "Capa Espacios Peatonales (1_Espacios_Peatonales)"))
-        self.addParameter(QgsProcessingParameterFeatureSource(PADRONES, "Capa Padrones (padrones_img)"))
-        self.addParameter(QgsProcessingParameterFeatureSource(CONSTRUCCIONES, "Capa Construcciones (2_construcciones)"))
-        self.addParameter(QgsProcessingParameterFeatureSource(ASENTAMIENTOS, "Capa Asentamientos"))
+        self.addParameter(QgsProcessingParameterFeatureSource(CALLES, "Capa Calles (opcional)", optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource(ESPACIOS_VERDES, "Capa Espacios Verdes (opcional)", optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource(ESPACIOS_PEATONALES, "Capa Espacios Peatonales (opcional)", optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource(PADRONES, "Capa Padrones (opcional)", optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource(CONSTRUCCIONES, "Capa Construcciones (opcional)", optional=True))
+        self.addParameter(QgsProcessingParameterFeatureSource(ASENTAMIENTOS, "Capa Asentamientos (opcional)", optional=True))
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CF_ACCESO,
@@ -201,8 +203,15 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_TIPO_VIA,
-                "Campo TIPO_VIA en Calles",
+                "Campo Tipo Via en Calles",
                 defaultValue=CAMPO_TIPO_VIA,
+            )
+        )
+        self.addParameter(
+            QgsProcessingParameterString(
+                PARAM_DESCRIPTORES_CLASE_2,
+                "Valores de Tipo Via que clasifican como Clase 2 (separados por coma)",
+                defaultValue=", ".join(sorted(DESCRIPTORES_CLASE_2_DEFAULT)),
             )
         )
         self.addParameter(
@@ -230,14 +239,8 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
 
         if capa_colectores is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
-        for nombre, src in [
-            ("Registros", src_registros), ("Calles", src_calles),
-            ("Espacios Verdes", src_verdes), ("Espacios Peatonales", src_peatonal),
-            ("Padrones", src_padrones), ("Construcciones", src_constr),
-            ("Asentamientos", src_asent),
-        ]:
-            if src is None:
-                raise QgsProcessingException(f"No se pudo leer la capa {nombre}.")
+        if src_registros is None:
+            raise QgsProcessingException("No se pudo leer la capa Registros.")
 
         campo_cf_acceso = (
             self.parameterAsString(parameters, PARAM_CAMPO_CF_ACCESO, context).strip()
@@ -257,8 +260,17 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         )
         campo_tipo_via = (
             self.parameterAsString(parameters, PARAM_CAMPO_TIPO_VIA, context).strip()
-            or CAMPO_TIPO_VIA   
+            or CAMPO_TIPO_VIA
         )
+        descriptores_str = (
+            self.parameterAsString(parameters, PARAM_DESCRIPTORES_CLASE_2, context) or ""
+        ).strip()
+        descriptores_clase_2 = (
+            {v.strip().lower() for v in descriptores_str.split(",") if v.strip()}
+            if descriptores_str
+            else set(DESCRIPTORES_CLASE_2_DEFAULT)
+        )
+        feedback.pushInfo(f"Descriptores Clase 2: {', '.join(sorted(descriptores_clase_2))}")
         try:
             buffer_calles = float(
                 self.parameterAsString(parameters, PARAM_BUFFER_CALLES, context)
@@ -281,12 +293,6 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         if idx_id_reg == -1:
             raise QgsProcessingException(f"No se encontro '{campo_id_reg}' en Registros.")
 
-        idx_tipo_via = _find_field_index(
-            src_calles.fields(), (campo_tipo_via,), ("tipo", "via")
-        )
-        if idx_tipo_via == -1:
-            raise QgsProcessingException(f"No se encontro '{campo_tipo_via}' en Calles.")
-
         feedback.pushInfo("Construyendo indices espaciales...")
         crs_ref = src_registros.sourceCrs()
 
@@ -296,38 +302,29 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
                 return QgsCoordinateTransform(crs_src, crs_ref, QgsProject.instance())
             return None
 
-        feedback.pushInfo("  → Calles")
-        idx_calles, geom_calles = _build_index_transformed(
-            src_calles, _transformador(src_calles)
-        )
+        def _build_optional(src, label):
+            if src is None:
+                feedback.pushInfo(f"  → {label}: no proporcionada, se omite.")
+                return None, {}
+            feedback.pushInfo(f"  → {label}")
+            return _build_index_transformed(src, _transformador(src))
+
+        idx_calles,   geom_calles   = _build_optional(src_calles,   "Calles")
+        idx_verdes,   geom_verdes   = _build_optional(src_verdes,   "Espacios Verdes")
+        idx_peatonal, geom_peatonal = _build_optional(src_peatonal, "Espacios Peatonales")
+        idx_padrones, geom_padrones = _build_optional(src_padrones, "Padrones")
+        idx_constr,   geom_constr   = _build_optional(src_constr,   "Construcciones")
+        idx_asent,    geom_asent    = _build_optional(src_asent,    "Asentamientos")
+
         attr_calles = {}
-        for feat in src_calles.getFeatures():
-            attr_calles[feat.id()] = feat[idx_tipo_via]
-
-        feedback.pushInfo("  → Espacios Verdes")
-        idx_verdes, geom_verdes = _build_index_transformed(
-            src_verdes, _transformador(src_verdes)
-        )
-
-        feedback.pushInfo("  → Espacios Peatonales")
-        idx_peatonal, geom_peatonal = _build_index_transformed(
-            src_peatonal, _transformador(src_peatonal)
-        )
-
-        feedback.pushInfo("  → Padrones")
-        idx_padrones, geom_padrones = _build_index_transformed(
-            src_padrones, _transformador(src_padrones)
-        )
-
-        feedback.pushInfo("  → Construcciones")
-        idx_constr, geom_constr = _build_index_transformed(
-            src_constr, _transformador(src_constr)
-        )
-
-        feedback.pushInfo("  → Asentamientos")
-        idx_asent, geom_asent = _build_index_transformed(
-            src_asent, _transformador(src_asent)
-        )
+        if src_calles is not None:
+            idx_tipo_via = _find_field_index(
+                src_calles.fields(), (campo_tipo_via,), ("tipo", "via")
+            )
+            if idx_tipo_via == -1:
+                raise QgsProcessingException(f"No se encontro '{campo_tipo_via}' en Calles.")
+            for feat in src_calles.getFeatures():
+                attr_calles[feat.id()] = feat[idx_tipo_via]
 
         # ── Clasificar cada Registro ───────────────────────────────────────────
         feedback.pushInfo("Clasificando Registros...")
@@ -356,7 +353,7 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
                 idx_peatonal, geom_peatonal,
                 idx_verdes,   geom_verdes,
                 idx_calles,   geom_calles, attr_calles,
-                buffer_calles,
+                buffer_calles, descriptores_clase_2,
             )
             clase_por_id_registro[reg_id] = clase
             feedback.setProgress(50.0 * i / max(total_reg, 1))
