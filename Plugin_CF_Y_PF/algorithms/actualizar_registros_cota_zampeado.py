@@ -358,7 +358,10 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                     # Profundidad = Cota_Tapa - Cota_Zampeado
                     cota_tapa_val = _to_float_or_none(reg_feature[idx_cota_tapa])
                     if cota_tapa_val is not None:
-                        prof_calc = round(cota_tapa_val - zarriba_val, 2)
+                        if cota_tapa_val == 0 or zarriba_val == 0:
+                            prof_calc = 0.0
+                        else:
+                            prof_calc = round(cota_tapa_val - zarriba_val, 2)
                         if not registros_layer.changeAttributeValue(
                             reg_feature.id(), idx_prof_inspec, prof_calc
                         ):
