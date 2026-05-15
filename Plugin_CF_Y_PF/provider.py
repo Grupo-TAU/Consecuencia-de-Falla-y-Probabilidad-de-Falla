@@ -9,6 +9,7 @@ from .algorithms.cf_prox_medio_ambiental import CfProxMedioAmbiental
 from .algorithms.cf_total import CfTotal
 from .algorithms.pf_probabilidad_falla import PfProbabilidadFalla as Pf
 from .algorithms.riesgo_calculo import RiesgoCalculo as Riesgo
+from .algorithms.asignar_registros_colectores import AsignarRegistrosColectores
 from .algorithms.actualizar_colectores_long_zamp_pend import ActualizarColectoresLongZampPend as ActualizarColectores
 from .algorithms.aplicar_simbologia import AplicarSimbologia
 from .algorithms.cf_antiguedad import CfAntiguedad
@@ -30,6 +31,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(CfTotal())
         self.addAlgorithm(Pf())
         self.addAlgorithm(Riesgo())
+        self.addAlgorithm(AsignarRegistrosColectores())
         self.addAlgorithm(ActualizarColectores())
         self.addAlgorithm(AplicarSimbologia())
         self.addAlgorithm(CfAntiguedad())

@@ -1,14 +1,11 @@
 from qgis.core import (
     QgsField,
-    QgsGeometry,
-    QgsPointXY,
     QgsProcessingAlgorithm,
     QgsProcessingException,
+    QgsProcessingOutputNumber,
     QgsProcessingParameterFeatureSource,
     QgsProcessingParameterString,
     QgsProcessingParameterVectorLayer,
-    QgsProcessingOutputNumber,
-    QgsSpatialIndex,
 )
 from qgis.PyQt.QtCore import QVariant
 
@@ -42,19 +39,7 @@ def _is_null(value):
     return str(value).strip().upper() == "NULL"
 
 
-def _endpoints(geom):
-    """Devuelve (QgsPointXY inicio, QgsPointXY fin) del primer y ultimo vertice de la linea."""
-    vertices = list(geom.vertices())
-    if not vertices:
-        return None, None
-    return (
-        QgsPointXY(vertices[0].x(),  vertices[0].y()),
-        QgsPointXY(vertices[-1].x(), vertices[-1].y()),
-    )
-
-
 def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20, field_prec=6):
-    """Agrega un campo a la capa y devuelve (idx, fields_actualizados)."""
     if not layer.dataProvider().addAttributes(
         [QgsField(field_name, variant_type, len=field_len, prec=field_prec)]
     ):
@@ -74,13 +59,13 @@ def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20,
 
 # ── Defaults de campos ────────────────────────────────────────────────────────
 # Colectores
-CAMPO_LONGITUD_DEFAULT    = "Longitud"
-CAMPO_REG_INI_DEFAULT     = "Registro_Inicial"
-CAMPO_REG_FIN_DEFAULT     = "Registro_Final"
-CAMPO_COTA_INI_DEFAULT    = "Registro_Inicial_Cota_Zampeado"
-CAMPO_COTA_FIN_DEFAULT    = "Registro_Final_Cota_Zampeado"
-CAMPO_PENDIENTE_DEFAULT   = "Pendiente"
-CAMPO_PROF_SALTO_DEFAULT  = "Prof_Salto"
+CAMPO_LONGITUD_DEFAULT   = "Longitud"
+CAMPO_REG_INI_DEFAULT    = "Registro_Inicial"
+CAMPO_REG_FIN_DEFAULT    = "Registro_Final"
+CAMPO_COTA_INI_DEFAULT   = "Registro_Inicial_Cota_Zampeado"
+CAMPO_COTA_FIN_DEFAULT   = "Registro_Final_Cota_Zampeado"
+CAMPO_PENDIENTE_DEFAULT  = "Pendiente"
+CAMPO_PROF_SALTO_DEFAULT = "Prof_Salto"
 # Registros
 CAMPO_ID_REG_DEFAULT      = "ID"
 CAMPO_COTA_ZAMP_DEFAULT   = "Cota_Zampeado_Calculada"
@@ -89,8 +74,6 @@ CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES              = "COLECTORES"
 REGISTROS               = "REGISTROS"
-PARAM_TOLERANCIA_GEOM   = "TOLERANCIA_GEOM"
-TOLERANCIA_GEOM_DEFAULT = 0.5
 PARAM_CAMPO_LONGITUD    = "CAMPO_LONGITUD"
 PARAM_CAMPO_REG_INI     = "CAMPO_REG_INI"
 PARAM_CAMPO_REG_FIN     = "CAMPO_REG_FIN"
@@ -121,13 +104,15 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "1) Completa Registro_Inicial / Registro_Final cuando estan en NULL, "
-            "buscando el Registro (punto) mas cercano al extremo del colector "
-            "dentro de la tolerancia indicada.\n\n"
-            "2) Actualiza Longitud (desde la geometria).\n\n"
-            "3) Completa Registro_Inicial_Cota_Zampeado y Registro_Final_Cota_Zampeado "
-            "a partir de la capa Registros (solo si estan en NULL).\n\n"
-            "4) Recalcula la Pendiente."
+            "Requiere haber ejecutado antes:\n"
+            "  1. Asignar Registro Inicial y Final en Colectores\n"
+            "  2. Actualizar Registros - Cota Zampeado\n\n"
+            "Este algoritmo (paso 3):\n"
+            "  - Actualiza Longitud desde la geometria.\n"
+            "  - Copia Cota_Zampeado_Calculada de cada Registro hacia\n"
+            "    Registro_Inicial_Cota_Zampeado y Registro_Final_Cota_Zampeado\n"
+            "    (solo si estan en NULL).\n"
+            "  - Recalcula Pendiente = (Cota_Ini - Cota_Fin) / Longitud * 100."
         )
 
     def createInstance(self):
@@ -141,13 +126,6 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(REGISTROS, "Capa Registros")
-        )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_TOLERANCIA_GEOM,
-                "Tolerancia geometrica para asignar Registro_Inicial/Final (metros)",
-                defaultValue=str(TOLERANCIA_GEOM_DEFAULT),
-            )
         )
         # ── Campos Colectores ──────────────────────────────────────────────────
         self.addParameter(
@@ -228,14 +206,6 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         if registros_source is None:
             raise QgsProcessingException("No se pudo leer la capa Registros.")
 
-        try:
-            tolerancia = float(
-                self.parameterAsString(parameters, PARAM_TOLERANCIA_GEOM, context)
-                .strip().replace(",", ".")
-            )
-        except (ValueError, AttributeError):
-            tolerancia = TOLERANCIA_GEOM_DEFAULT
-
         def _param(key, default):
             v = self.parameterAsString(parameters, key, context).strip()
             return v or default
@@ -254,25 +224,12 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         colectores_fields = colectores_layer.fields()
         registros_fields  = registros_source.fields()
 
+        # ── Campos Colectores: auto-crear si no existen ────────────────────────
         idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
         if idx_longitud == -1:
             idx_longitud, colectores_fields = _add_field_to_layer(
                 colectores_layer, campo_longitud, QVariant.Double, feedback,
                 field_len=20, field_prec=2,
-            )
-
-        idx_reg_ini = _find_field_index(colectores_fields, (campo_reg_ini,))
-        if idx_reg_ini == -1:
-            idx_reg_ini, colectores_fields = _add_field_to_layer(
-                colectores_layer, campo_reg_ini, QVariant.String, feedback,
-                field_len=100, field_prec=0,
-            )
-
-        idx_reg_fin = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
-        if idx_reg_fin == -1:
-            idx_reg_fin, colectores_fields = _add_field_to_layer(
-                colectores_layer, campo_reg_fin, QVariant.String, feedback,
-                field_len=100, field_prec=0,
             )
 
         idx_cota_ini = _find_field_index(colectores_fields, (campo_cota_ini,))
@@ -296,11 +253,18 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 field_len=20, field_prec=6,
             )
 
-        idx_id_col          = _find_field_index(colectores_fields, ("ID", "id"))
-        idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
-        idx_cota_reg        = _find_field_index(registros_fields, (campo_cota_zamp,))
-        idx_prof_inspec_reg = _find_field_index(registros_fields, (campo_prof_inspec,))
-        idx_prof_salto_col  = (
+        # ── Campos Colectores: requeridos (deben existir del paso anterior) ────
+        idx_reg_ini = _find_field_index(colectores_fields, (campo_reg_ini,))
+        idx_reg_fin = _find_field_index(colectores_fields, (campo_reg_fin, "Registro_FInal"))
+        for nombre, idx in [(campo_reg_ini, idx_reg_ini), (campo_reg_fin, idx_reg_fin)]:
+            if idx == -1:
+                raise QgsProcessingException(
+                    f"No se encontro el campo '{nombre}' en Colectores. "
+                    "Ejecute primero 'Asignar Registro Inicial y Final en Colectores'."
+                )
+
+        idx_id_col         = _find_field_index(colectores_fields, ("ID", "id"))
+        idx_prof_salto_col = (
             _find_field_index(colectores_fields, (campo_prof_salto,))
             if campo_prof_salto else -1
         )
@@ -311,17 +275,38 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 "Campo Prof_Salto no configurado — no se aplicara ajuste de salto."
             )
 
-        required = {
-            campo_id_reg:    idx_id_reg,
-            campo_cota_zamp: idx_cota_reg,
-        }
-        missing = [name for name, idx in required.items() if idx == -1]
-        if missing:
-            raise QgsProcessingException(
-                "Faltan columnas requeridas en Registros: " + ", ".join(missing)
-            )
+        # ── Campos Registros: requeridos ───────────────────────────────────────
+        idx_id_reg          = _find_field_index(registros_fields, (campo_id_reg,))
+        idx_cota_reg        = _find_field_index(registros_fields, (campo_cota_zamp,))
+        idx_prof_inspec_reg = _find_field_index(registros_fields, (campo_prof_inspec,))
 
-        # ── Inicio de edicion unico para todo el algoritmo ─────────────────────
+        for nombre, idx in [(campo_id_reg, idx_id_reg), (campo_cota_zamp, idx_cota_reg)]:
+            if idx == -1:
+                raise QgsProcessingException(
+                    f"No se encontro el campo '{nombre}' en Registros."
+                )
+
+        # ── Construir mapas de lookup desde Registros ──────────────────────────
+        mapa_cota        = {}
+        mapa_prof_inspec = {}
+
+        for reg_feat in registros_source.getFeatures():
+            reg_id_val = _normalize_node(reg_feat[idx_id_reg])
+            if not reg_id_val:
+                continue
+            cota = _to_float_or_none(reg_feat[idx_cota_reg])
+            if cota is not None and reg_id_val not in mapa_cota:
+                mapa_cota[reg_id_val] = cota
+            if idx_prof_inspec_reg != -1:
+                prof = _to_float_or_none(reg_feat[idx_prof_inspec_reg])
+                if prof is not None and reg_id_val not in mapa_prof_inspec:
+                    mapa_prof_inspec[reg_id_val] = prof
+
+        feedback.pushInfo(
+            f"Registros con cota zampeado disponible: {len(mapa_cota)}"
+        )
+
+        # ── Inicio de edicion ──────────────────────────────────────────────────
         inicio_edicion = False
         if not colectores_layer.isEditable():
             if not colectores_layer.startEditing():
@@ -331,114 +316,17 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             inicio_edicion = True
 
         try:
-            # ── PASO 0: Completar Registro_Inicial / Registro_Final por geometria ──
-            feedback.pushInfo(
-                f"Paso 0: buscando registros por geometria (tolerancia={tolerancia} m)..."
-            )
-
-            # Indice espacial sobre registros
-            reg_index      = QgsSpatialIndex()
-            geom_reg       = {}   # fid → QgsGeometry (punto)
-            id_reg         = {}   # fid → valor ID (string)
-            mapa_cota      = {}   # id_string → Cota_Zampeado_Calculada
-            mapa_prof_inspec = {}  # id_string → Profundidad_Inspeccionada
-
-            for reg_feat in registros_source.getFeatures():
-                if not reg_feat.hasGeometry():
-                    continue
-                g = reg_feat.geometry()
-                if g is None or g.isEmpty():
-                    continue
-                reg_index.addFeature(reg_feat)
-                geom_reg[reg_feat.id()] = g
-                reg_id_val = _normalize_node(reg_feat[idx_id_reg])
-                id_reg[reg_feat.id()] = reg_id_val
-                if not reg_id_val:
-                    continue
-                cota = _to_float_or_none(reg_feat[idx_cota_reg])
-                if cota is not None and reg_id_val not in mapa_cota:
-                    mapa_cota[reg_id_val] = cota
-                if idx_prof_inspec_reg != -1:
-                    prof_inspec = _to_float_or_none(reg_feat[idx_prof_inspec_reg])
-                    if prof_inspec is not None and reg_id_val not in mapa_prof_inspec:
-                        mapa_prof_inspec[reg_id_val] = prof_inspec
-
-            colectores_list = list(colectores_layer.getFeatures())
-            total           = len(colectores_list)
-            if total == 0:
-                if inicio_edicion:
-                    colectores_layer.commitChanges()
-                return {OUTPUT_ACTUALIZADAS: 0}
-
-            asignados_ini = 0
-            asignados_fin = 0
-
-            for i, feature in enumerate(colectores_list, start=1):
-                if feedback.isCanceled():
-                    break
-
-                geom = feature.geometry()
-                if geom is None or geom.isEmpty():
-                    continue
-
-                pt_ini, pt_fin = _endpoints(geom)
-                if pt_ini is None:
-                    continue
-
-                reg_ini_actual = _normalize_node(feature[idx_reg_ini])
-                reg_fin_actual = _normalize_node(feature[idx_reg_fin])
-
-                # Registro_Inicial nulo → buscar el registro mas cercano al primer vertice
-                if not reg_ini_actual:
-                    candidatos = reg_index.nearestNeighbor(pt_ini, 1)
-                    for fid in candidatos:
-                        g_reg = geom_reg.get(fid)
-                        if g_reg is None:
-                            continue
-                        dist = QgsGeometry.fromPointXY(pt_ini).distance(g_reg)
-                        if dist <= tolerancia:
-                            colectores_layer.changeAttributeValue(
-                                feature.id(), idx_reg_ini, id_reg[fid]
-                            )
-                            asignados_ini += 1
-                        break   # nearestNeighbor ya devuelve el mas cercano
-
-                # Registro_Final nulo → buscar el registro mas cercano al ultimo vertice
-                if not reg_fin_actual:
-                    candidatos = reg_index.nearestNeighbor(pt_fin, 1)
-                    for fid in candidatos:
-                        g_reg = geom_reg.get(fid)
-                        if g_reg is None:
-                            continue
-                        dist = QgsGeometry.fromPointXY(pt_fin).distance(g_reg)
-                        if dist <= tolerancia:
-                            colectores_layer.changeAttributeValue(
-                                feature.id(), idx_reg_fin, id_reg[fid]
-                            )
-                            asignados_fin += 1
-                        break
-
-                feedback.setProgress(15.0 * i / total)
-
-            feedback.pushInfo(
-                f"  Registro_Inicial asignados: {asignados_ini} | "
-                f"Registro_Final asignados: {asignados_fin}"
-            )
-
-            # Recarga la lista para que el paso siguiente vea los valores recien escritos
-            colectores_list = list(colectores_layer.getFeatures())
-
-            # ── PASO 1-3: Longitud, Cotas y Pendiente ─────────────────────────────
-            feedback.pushInfo("Paso 1-3: actualizando Longitud, Cotas y Pendiente...")
-            actualizadas = 0
+            colectores_list  = list(colectores_layer.getFeatures())
+            total            = len(colectores_list)
+            actualizadas     = 0
             ids_actualizados = []
 
             for i, feature in enumerate(colectores_list, start=1):
                 if feedback.isCanceled():
                     break
 
-                reg_ini    = _normalize_node(feature[idx_reg_ini])
-                reg_fin    = _normalize_node(feature[idx_reg_fin])
+                reg_ini      = _normalize_node(feature[idx_reg_ini])
+                reg_fin      = _normalize_node(feature[idx_reg_fin])
                 hubo_cambios = False
 
                 geom = feature.geometry()
@@ -463,14 +351,10 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                         hubo_cambios = True
                         cota_fin_recien_copiada = True
 
-                # Ajuste por Prof_Salto: solo si la cota fue copiada en esta ejecucion
                 if cota_fin_recien_copiada and idx_prof_salto_col != -1:
                     prof_salto      = _to_float_or_none(feature[idx_prof_salto_col])
                     prof_inspec_fin = mapa_prof_inspec.get(reg_fin)
-                    if (
-                        prof_salto is not None
-                        and prof_inspec_fin is not None
-                    ):
+                    if prof_salto is not None and prof_inspec_fin is not None:
                         feature[idx_cota_fin] = round(
                             _to_float_or_none(feature[idx_cota_fin])
                             + (prof_inspec_fin - prof_salto), 2
@@ -504,7 +388,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                     col_id = str(feature[idx_id_col]).strip() if idx_id_col != -1 else str(feature.id())
                     ids_actualizados.append(col_id)
 
-                feedback.setProgress(15.0 + 85.0 * i / total)
+                feedback.setProgress(100.0 * i / max(total, 1))
 
             feedback.pushInfo(f"Colectores actualizados: {actualizadas}")
             if ids_actualizados:
