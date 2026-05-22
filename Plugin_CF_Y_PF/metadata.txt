@@ -1,18 +1,19 @@
 [general]
-name=Colectores Riesgo
+name=Consecuencia de Falla y Probabilidad de Falla
 version=0.2.2
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
-description=Calculo de factores de clasificacion y riesgo para red de colectores.
+description= Herramienta para el cálculo y clasificación del riesgo en redes de colectores.
+
 author=
 email=
-about=Plugin para gestionar el flujo de calculo de riesgo sobre la red de colectores.
-      Incluye clasificacion por diametro, profundidad, posicion relativa,
-      proximidad a clientes y medio ambiente, factor total, prioridad y riesgo final.
+about= Plugin desarrollado para automatizar el calculo de riesgo en red de colectores, integrando el cálculo de la Probabilidad de Falla y la Consecuencia de Falla  
+La Probabilidad de Falla se determina a partir de la condición física del tramo, utilizando la Clasificación Rápida PACP. La Consecuencia de Falla se calcula considerando factores económicos, sociales y medioambientales.
+El complemento permite clasificar y priorizar los tramos de la red, facilitando la toma de decisiones para mantenimiento o rehabilitación de colectores.
 tracker=
 repository=
-tags=colectores, riesgo, clasificacion
-homepage=
+tags=colectores, saneamiento, riesgo, PACP, probabilidad de falla, consecuencia de falla, clasificacion
+homepage= https://www.grupotau.uy/
 category=Vector
 icon=
 experimental=False
