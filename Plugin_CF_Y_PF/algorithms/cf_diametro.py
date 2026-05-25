@@ -114,11 +114,14 @@ class CfDiametro(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun su diametro y escribe el resultado "
-            "en el campo CF_Diametro (o el nombre configurado).\n\n"
-            "Los limites de clasificacion se expresan en mm separados por coma. "
-            "Con los valores por defecto (200, 300, 400, 500, 800) se generan "
-            "6 clases (1 = menor a 200 mm, ..., 6 = mayor o igual a 800 mm)."
+            "Clasifica cada colector según su diámetro usando límites configurables en milímetros y guarda el resultado en el campo de salida.\n\n"
+            "Con los valores por defecto (200, 300, 400, 500, 800) se generan \n\n"
+            "6 clases Si el diámetro es menor que 200 mm, asigna 1 \n\n"
+            "Si es menor que 300 mm, asigna 2\n\n"
+            "Si es menor que 400 mm, asigna 3\n\n"
+            "Si es menor que 500 mm, asigna 4\n\n"
+            "Si es menor que 800 mm, asigna 5\n\n"
+            "Si es mayor o igual a 800 mm, asigna 6"
         )
 
     def createInstance(self):
@@ -143,7 +146,7 @@ class CfDiametro(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_DIAMETRO,
-                "Nombre campo diametro (entrada)",
+                "Diametro",
                 defaultValue=CAMPO_DIAMETRO,
             )
         )

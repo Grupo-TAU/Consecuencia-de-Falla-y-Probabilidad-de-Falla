@@ -23,7 +23,7 @@ from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_MedioAmbiental"
+CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_CursosAgua"
 CAMPO_BUFFER_DISTANCIA_DEFAULT = "distancia_m"
 CAMPO_BUFFER_CLASE_DEFAULT     = "clase_cf"
 
@@ -43,14 +43,12 @@ PALETA_AZULES = {
 }
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES                   = "COLECTORES"
-CURSOS_AGUA                  = "CURSOS_AGUA"
-BUFFERS_VISIBLES             = "BUFFERS_VISIBLES"
-PARAM_CAMPO_CLASIFICACION    = "CAMPO_CLASIFICACION"
-PARAM_CAMPO_BUFFER_DISTANCIA = "CAMPO_BUFFER_DISTANCIA"
-PARAM_CAMPO_BUFFER_CLASE     = "CAMPO_BUFFER_CLASE"
-PARAM_RANGOS_BUFFER          = "RANGOS_BUFFER"
-OUTPUT_ACTUALIZADAS          = "ACTUALIZADAS"
+COLECTORES                = "COLECTORES"
+CURSOS_AGUA               = "CURSOS_AGUA"
+BUFFERS_VISIBLES          = "BUFFERS_VISIBLES"
+PARAM_CAMPO_CLASIFICACION = "CAMPO_CLASIFICACION"
+PARAM_RANGOS_BUFFER       = "RANGOS_BUFFER"
+OUTPUT_ACTUALIZADAS       = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,14 +103,14 @@ class _PostProcesoBuffersAzules(QgsProcessingLayerPostProcessorInterface):
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
-class CfProxMedioAmbiental(QgsProcessingAlgorithm):
-    """Clasifica colectores por proximidad a cursos de agua con buffers invertidos y salida visible."""
+class CfProxCursosAgua(QgsProcessingAlgorithm):
+    """Clasifica colectores por proximidad a cursos de agua con buffers crecientes."""
 
     def name(self):
-        return "CF_Prox_MedioAmbiental"
+        return "CF_Prox_CursosAgua"
 
     def displayName(self):
-        return "CF Proximidad MedioAmbiental"
+        return "CF Cursos de Agua"
 
     def group(self):
         return "Personalizados"
@@ -122,14 +120,14 @@ class CfProxMedioAmbiental(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun su proximidad a cursos de agua "
-            "mediante buffers crecientes (7 m, 15 m, ...). "
-            "Escribe la clase en el campo configurado y genera una capa auxiliar "
-            "con los buffers visibles."
+            "Clasifica cada colector según su proximidad a cursos de agua. "
+            "Crea buffers crecientes alrededor de los cursos de agua y asigna una clase al colector "
+            "según el buffer más cercano que lo intersecta.\n\n"
+            "El resultado se guarda en el campo configurado y además se genera una capa auxiliar con los buffers."
         )
 
     def createInstance(self):
-        return CfProxMedioAmbiental()
+        return CfProxCursosAgua()
 
     # ── Definicion de parametros ───────────────────────────────────────────────
 
@@ -143,22 +141,8 @@ class CfProxMedioAmbiental(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CLASIFICACION,
-                "Nombre campo salida (CF proximidad medioambiental)",
+                "Nombre campo salida (CF proximidad cursos de agua)",
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
-            )
-        )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CAMPO_BUFFER_DISTANCIA,
-                "Nombre campo distancia en buffers",
-                defaultValue=CAMPO_BUFFER_DISTANCIA_DEFAULT,
-            )
-        )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CAMPO_BUFFER_CLASE,
-                "Nombre campo clase en buffers",
-                defaultValue=CAMPO_BUFFER_CLASE_DEFAULT,
             )
         )
         self.addParameter(
@@ -185,25 +169,17 @@ class CfProxMedioAmbiental(QgsProcessingAlgorithm):
             self.parameterAsString(parameters, PARAM_CAMPO_CLASIFICACION, context).strip()
             or CAMPO_CLASIFICACION_DEFAULT
         )
-        campo_buffer_distancia = (
-            self.parameterAsString(parameters, PARAM_CAMPO_BUFFER_DISTANCIA, context).strip()
-            or CAMPO_BUFFER_DISTANCIA_DEFAULT
-        )
-        campo_buffer_clase = (
-            self.parameterAsString(parameters, PARAM_CAMPO_BUFFER_CLASE, context).strip()
-            or CAMPO_BUFFER_CLASE_DEFAULT
-        )
-        rangos_str    = self.parameterAsString(parameters, PARAM_RANGOS_BUFFER, context)
+        campo_buffer_distancia = CAMPO_BUFFER_DISTANCIA_DEFAULT
+        campo_buffer_clase = CAMPO_BUFFER_CLASE_DEFAULT
+        rangos_str = self.parameterAsString(parameters, PARAM_RANGOS_BUFFER, context)
         rangos_buffer = _parse_rangos_buffer(rangos_str, RANGOS_BUFFER_DEFAULT)
 
         feedback.pushInfo(f"Campo clasificacion configurado: {campo_clasificacion}")
-        feedback.pushInfo(f"Campo buffer distancia: {campo_buffer_distancia}")
-        feedback.pushInfo(f"Campo buffer clase: {campo_buffer_clase}")
         feedback.pushInfo(
             f"Rangos buffer configurados: {', '.join(f'{int(d)}:{c}' for d, c in rangos_buffer)}"
         )
 
-        capa_lineas    = self.parameterAsVectorLayer(parameters, COLECTORES, context)
+        capa_lineas = self.parameterAsVectorLayer(parameters, COLECTORES, context)
         capa_poligonos = self.parameterAsSource(parameters, CURSOS_AGUA, context)
 
         if capa_lineas is None:
