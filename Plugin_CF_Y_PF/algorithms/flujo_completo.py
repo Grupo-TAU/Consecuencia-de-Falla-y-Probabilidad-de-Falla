@@ -28,11 +28,12 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         9. CF Antiguedad
        10. CF Material
        11. CF Acceso Mantenimiento
-       12. CF Obstrucciones
-       13. CF Total
-       14. PF Probabilidad de Falla
-       15. Riesgo
-       16. Aplicar Simbologia
+       12. CF Ubicacion de la Tuberia
+       13. CF Obstrucciones
+       14. CF Total
+       15. PF Probabilidad de Falla
+       16. Riesgo
+       17. Aplicar Simbologia
     """
 
     COLECTORES           = "COLECTORES"
@@ -45,6 +46,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
     PADRONES             = "PADRONES"
     CONSTRUCCIONES       = "CONSTRUCCIONES"
     ASENTAMIENTOS        = "ASENTAMIENTOS"
+    VIAS                 = "VIAS"
     BUFFERS_CLIENTES     = "BUFFERS_CLIENTES"
     BUFFERS_AGUA         = "BUFFERS_AGUA"
     CAMPO_SIMBOLOGIA     = "CAMPO_SIMBOLOGIA"
@@ -140,6 +142,13 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             )
         )
         self.addParameter(
+            QgsProcessingParameterFeatureSource(
+                self.VIAS,
+                "Capa Vias (CF Ubicacion)",
+                optional=True,
+            )
+        )
+        self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.BUFFERS_CLIENTES,
                 "Buffers Clientes Importantes (salida)",
@@ -191,7 +200,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             if self.parameterAsSource(parameters, param, context) is None:
                 raise QgsProcessingException(f"No se pudo leer la capa {nombre}.")
 
-        total_pasos      = 16
+        total_pasos      = 17
         pasos_ok         = 0
         buffers_clientes_id = None
         buffers_agua_id     = None
@@ -335,46 +344,63 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 12: CF Obstrucciones ──────────────────────────────────────────
+        # ── PASO 12: CF Ubicacion de la Tuberia ───────────────────────────────
+        # Es opcional: si el usuario no provee la capa Vias, se omite el paso.
         if not feedback.isCanceled():
-            if _ejecutar(12, "CF Obstrucciones",
+            src_vias = self.parameterAsSource(parameters, self.VIAS, context)
+            if src_vias is None:
+                feedback.pushInfo(
+                    f"[12/{total_pasos}] CF Ubicacion: capa Vias no proporcionada, paso omitido."
+                )
+            else:
+                if _ejecutar(12, "CF Ubicacion de la Tuberia",
+                             f"{PROVIDER_ID}:cf_ubicacion",
+                             {
+                                 "COLECTORES": colectores.id(),
+                                 "VIAS":       parameters[self.VIAS],
+                             }) is not None:
+                    pasos_ok += 1
+
+        # ── PASO 13: CF Obstrucciones ──────────────────────────────────────────
+        if not feedback.isCanceled():
+            if _ejecutar(13, "CF Obstrucciones",
                          f"{PROVIDER_ID}:cf_obstrucciones",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 13: CF Total ──────────────────────────────────────────────────
+        # ── PASO 14: CF Total ──────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(13, "CF Total",
+            if _ejecutar(14, "CF Total",
                          f"{PROVIDER_ID}:cf_total",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 14: PF Probabilidad de Falla ─────────────────────────────────
+        # ── PASO 15: PF Probabilidad de Falla ─────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(14, "PF Probabilidad de Falla",
+            if _ejecutar(15, "PF Probabilidad de Falla",
                          f"{PROVIDER_ID}:pf_probabilidad_falla",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 15: Riesgo ────────────────────────────────────────────────────
+        # ── PASO 16: Riesgo ────────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(15, "Riesgo",
+            if _ejecutar(16, "Riesgo",
                          f"{PROVIDER_ID}:riesgo_calculo",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 16: Aplicar Simbologia ────────────────────────────────────────
+        # ── PASO 17: Aplicar Simbologia ────────────────────────────────────────
         if not feedback.isCanceled():
             campo_simb = self.parameterAsString(parameters, self.CAMPO_SIMBOLOGIA, context)
-            if _ejecutar(16, "Aplicar Simbologia",
+            if _ejecutar(17, "Aplicar Simbologia",
                          f"{PROVIDER_ID}:aplicar_simbologia",
                          {
                              "COLECTORES": colectores.id(),
