@@ -90,18 +90,12 @@ class CfMaterial(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun el material y escribe el resultado "
-            "en CF_Material.\n\n"
-            "El mapeo es configurable con el formato:\n"
-            "  NombreMaterial=Clase; NombreMaterial2=Clase2; ...\n\n"
-            "La comparacion ignora mayusculas y acentos.\n"
-            "Valores no reconocidos quedan con clase 0.\n\n"
-            "Mapeo por defecto:\n"
-            "  PE=1\n"
-            "  PVC=3 | PEAD=3 | Otro Material=3\n"
-            "  Hormigon Armado=4\n"
-            "  Hormigon Simple=5\n"
-            "  Mamposteria=6"
+            "Clasifica cada colector según el material del tramo mediante una asignación de clases por material y guarda el resultado en el campo de salida.\n\n"
+            "Toma el valor del campo de material, lo normaliza para ignorar mayúsculas y acentos, y lo compara con la asignación de clases por material\n"
+            "El resultado se guarda en el campo de salida y los materiales no reconocidos quedan con clase 0.\n\n"
+            "Mapeo por defecto:\n\n"
+            "  PE=1 | PVC=3 | PEAD=3 | Otro Material=3 | Hormigon Armado=4 | Hormigon Simple=5 | Mamposteria=6\n"
+            "El usuario puede configurar el mapeo ingresando pares Material=Clase separados por punto y coma.\n\n"
         )
 
     def createInstance(self):
@@ -123,14 +117,14 @@ class CfMaterial(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_MAT,
-                "Nombre campo material (entrada)",
+                "Material ",
                 defaultValue=CAMPO_MATERIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_MAPEO,
-                "Mapeo material=clase (separado por punto y coma)",
+                "Material=Clase (separado por punto y coma)",
                 defaultValue=MAPEO_DEFAULT,
                 multiLine=True,
             )

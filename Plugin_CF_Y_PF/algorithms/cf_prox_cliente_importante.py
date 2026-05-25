@@ -43,14 +43,12 @@ PALETA_VERDES = {
 }
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES                  = "COLECTORES"
-CLIENTES_IMPORTANTES        = "CLIENTES_IMPORTANTES"
-BUFFERS_VISIBLES            = "BUFFERS_VISIBLES"
-PARAM_CAMPO_CLASIFICACION   = "CAMPO_CLASIFICACION"
-PARAM_CAMPO_BUFFER_DISTANCIA = "CAMPO_BUFFER_DISTANCIA"
-PARAM_CAMPO_BUFFER_CLASE    = "CAMPO_BUFFER_CLASE"
-PARAM_RANGOS_BUFFER         = "RANGOS_BUFFER"
-OUTPUT_ACTUALIZADAS         = "ACTUALIZADAS"
+COLECTORES                = "COLECTORES"
+CLIENTES_IMPORTANTES      = "CLIENTES_IMPORTANTES"
+BUFFERS_VISIBLES          = "BUFFERS_VISIBLES"
+PARAM_CAMPO_CLASIFICACION = "CAMPO_CLASIFICACION"
+PARAM_RANGOS_BUFFER       = "RANGOS_BUFFER"
+OUTPUT_ACTUALIZADAS       = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -122,10 +120,11 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun su proximidad a clientes importantes "
-            "mediante buffers crecientes (300 m, 1500 m, ...). "
-            "Escribe la clase en el campo configurado y genera una capa auxiliar "
-            "con los buffers visibles."
+            "Clasifica cada colector segun su proximidad a clientes importantes. "
+            "Crea buffers  crecientes al rededor de los clientes y asigna una clase al colector "
+            "según el buffer más cercano que lo intersecta.\n\n" 
+            "Se guarda el resultado en el campo CF_Prox_ClienteImportante y se genera una capa auxiliar con los buffers que permite ver gráficamente los buffers.\n\n"
+        
         )
 
     def createInstance(self):
@@ -147,20 +146,7 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
             )
         )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CAMPO_BUFFER_DISTANCIA,
-                "Nombre campo distancia en buffers",
-                defaultValue=CAMPO_BUFFER_DISTANCIA_DEFAULT,
-            )
-        )
-        self.addParameter(
-            QgsProcessingParameterString(
-                PARAM_CAMPO_BUFFER_CLASE,
-                "Nombre campo clase en buffers",
-                defaultValue=CAMPO_BUFFER_CLASE_DEFAULT,
-            )
-        )
+       
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_RANGOS_BUFFER,
@@ -185,25 +171,17 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
             self.parameterAsString(parameters, PARAM_CAMPO_CLASIFICACION, context).strip()
             or CAMPO_CLASIFICACION_DEFAULT
         )
-        campo_buffer_distancia = (
-            self.parameterAsString(parameters, PARAM_CAMPO_BUFFER_DISTANCIA, context).strip()
-            or CAMPO_BUFFER_DISTANCIA_DEFAULT
-        )
-        campo_buffer_clase = (
-            self.parameterAsString(parameters, PARAM_CAMPO_BUFFER_CLASE, context).strip()
-            or CAMPO_BUFFER_CLASE_DEFAULT
-        )
-        rangos_str    = self.parameterAsString(parameters, PARAM_RANGOS_BUFFER, context)
+        campo_buffer_distancia = CAMPO_BUFFER_DISTANCIA_DEFAULT
+        campo_buffer_clase = CAMPO_BUFFER_CLASE_DEFAULT
+        rangos_str = self.parameterAsString(parameters, PARAM_RANGOS_BUFFER, context)
         rangos_buffer = _parse_rangos_buffer(rangos_str, RANGOS_BUFFER_DEFAULT)
 
         feedback.pushInfo(f"Campo clasificacion configurado: {campo_clasificacion}")
-        feedback.pushInfo(f"Campo buffer distancia: {campo_buffer_distancia}")
-        feedback.pushInfo(f"Campo buffer clase: {campo_buffer_clase}")
         feedback.pushInfo(
             f"Rangos buffer configurados: {', '.join(f'{int(d)}:{c}' for d, c in rangos_buffer)}"
         )
 
-        capa_lineas  = self.parameterAsVectorLayer(parameters, COLECTORES, context)
+        capa_lineas = self.parameterAsVectorLayer(parameters, COLECTORES, context)
         capa_puntos  = self.parameterAsSource(parameters, CLIENTES_IMPORTANTES, context)
 
         if capa_lineas is None:

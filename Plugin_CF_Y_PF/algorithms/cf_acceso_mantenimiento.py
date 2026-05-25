@@ -152,10 +152,9 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun la accesibilidad para mantenimiento "
-            "(1 = via publica libre, 6 = zona critica/inaccesible).\n\n"
-            "Clasifica primero cada Registro (punto) segun su ubicacion espacial "
-            "y luego asigna al colector el minimo (mejor) de sus dos extremos."
+            "Clasifica cada colector segun la accesibilidad para su mantenimiento "
+            "basandose en la informacion espacial de los registros y de varias capaz auxiliares."
+            "Clasifica primero cada registro adyacente y luego asigna al colector el mejor (con menor clasificacion) de sus dos extremos."
         )
 
     def createInstance(self):
@@ -182,14 +181,14 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_INICIAL,
-                "Campo Registro Inicial en Colectores",
+                "Registro Inicial en capa de Colectores",
                 defaultValue=CAMPO_REGISTRO_INICIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_FINAL,
-                "Campo Registro Final en Colectores",
+                "Registro Final en capa de Colectores",
                 defaultValue=CAMPO_REGISTRO_FINAL,
             )
         )
@@ -203,14 +202,14 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_TIPO_VIA,
-                "Campo Tipo Via en Calles",
+                "Tipo Via de Calles",
                 defaultValue=CAMPO_TIPO_VIA,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_DESCRIPTORES_CLASE_2,
-                "Valores de Tipo Via que clasifican como Clase 2 (separados por coma)",
+                "Tipos de Via que dificultan acceso, clasifican como clase 2 (separados por coma)",
                 defaultValue=", ".join(sorted(DESCRIPTORES_CLASE_2_DEFAULT)),
             )
         )

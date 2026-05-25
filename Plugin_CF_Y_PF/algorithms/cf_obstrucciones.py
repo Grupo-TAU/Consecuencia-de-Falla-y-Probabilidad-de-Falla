@@ -64,13 +64,12 @@ class CfObstrucciones(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun la cantidad de obstrucciones por ano "
-            "(con y sin desbordes) y escribe el resultado en CF_Obstrucciones.\n\n"
-            "Clasificacion:\n"
-            "  0 obstrucciones (Baja)  → 1\n"
-            "  1 obstruccion   (Media) → 3\n"
-            "  >=2 obstrucciones (Alta)  → 6\n\n"
-            "Si el campo de obstrucciones esta vacio o es nulo, se asigna clase 1."
+            "Clasifica cada colector según la cantidad de obstrucciones registradas por año y guarda el resultado en el campo de salida.\n\n"
+            "Se toma el valor del campo de obstrucciones, y lo clasifica en tres niveles: baja, media y alta.   \n\n"
+            "Si no hay valor registrado, se asigna la clase 1 (Baja).\n\n"
+            "Si hay 1 obstruccion , se asigna la clase 3 (Media)\n\n"
+            "Si hay >=2 obstrucciones , se asigna la clase 6 (Alta)\n\n"
+            "El resultado se guarda en el campo de salida configurado"
         )
 
     def createInstance(self):
