@@ -25,7 +25,7 @@ BUFFER_BUSQUEDA_DEFAULT     = 10.0   # metros — radio alrededor del punto medi
 #   Céntrica                   → 4
 #   Vía colectora/Edificaciones → 5
 #   Arteria/Canal              → 6
-#
+# El mapeo se hace buscando subcadenas dentro del valor del campo TIPO de cada via.
 # Formato: lista de (subcadena_normalizada, clase) — se evalua en orden,
 # se usa el mayor clase encontrado si el colector intersecta multiples vias.
 TIPO_CLASIFICACION_DEFAULT_STR = (
@@ -147,7 +147,7 @@ class CfUbicacion(QgsProcessingAlgorithm):
     Clasifica colectores segun el tipo de via sobre la que se encuentran.
 
     Para cada colector se calcula el PUNTO MEDIO de la linea (al 50 % de su
-    longitud) y se crea un buffer de radio configurable (default 7 m) solo
+    longitud) y se crea un buffer de radio configurable (default 10 m) solo
     alrededor de ese punto. Esto evita capturar vias de esquinas o cruces que
     no corresponden al tramo principal del colector.
 
