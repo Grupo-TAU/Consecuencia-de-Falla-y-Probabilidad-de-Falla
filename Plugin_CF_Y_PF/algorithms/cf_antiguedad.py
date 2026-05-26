@@ -63,7 +63,7 @@ def _clasificar_antiguedad(edad, limites, clases):
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
 class CfAntiguedad(QgsProcessingAlgorithm):
-    """Clasifica colectores por antiguedad (edad en anos) y escribe CF_Antiguedad."""
+    """Clasifica colectores por antiguedad y escribe CF_Antiguedad."""
 
     def name(self):
         return "cf_antiguedad"
@@ -79,15 +79,10 @@ class CfAntiguedad(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun la edad (anos) y escribe el resultado "
-            "en CF_Antiguedad.\n\n"
+            "Clasifica cada colector según su antigüedad (años) usando rangos configurables y guarda el resultado en el campo de salida.\n\n"
             "Los rangos son configurables mediante dos parametros:\n"
-            "  - Limites: limites superiores de cada tramo, separados por coma.\n"
-            "  - Clases: valor asignado a cada tramo (debe haber un valor mas que limites).\n\n"
-            "Ejemplo por defecto:\n"
-            "  Limites: 10, 20, 30, 50\n"
-            "  Clases:   1,  2,  3,  4,  6\n"
-            "  Resultado: 0-10→1 | 11-20→2 | 21-30→3 | 31-50→4 | >50→6"
+            "  - Limites: Límites superiores de cada tramo de edad. Se ingresan separados por coma, por ejemplo: 10, 20, 30, 50.\n"
+            "  - Clases: Clase asignada a cada tramo. Debe haber una clase más que el número de límites, por ejemplo: 1, 2, 3, 4, 6.\n\n"
         )
 
     def createInstance(self):
@@ -109,21 +104,21 @@ class CfAntiguedad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_EDAD,
-                "Nombre campo antiguedad (entrada)",
+                "Antiguedad (años)",
                 defaultValue=CAMPO_EDAD,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_LIMITES,
-                "Limites de antiguedad por tramo (anos, separados por coma)",
+                "Limites de antiguedad (años, separados por coma)",
                 defaultValue=", ".join(str(v) for v in LIMITES_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CLASES,
-                "Clases por tramo (un valor mas que limites, separados por coma)",
+                "Clase por tramo (un valor mas que limites, separados por coma)",
                 defaultValue=", ".join(str(v) for v in CLASES_DEFAULT),
             )
         )

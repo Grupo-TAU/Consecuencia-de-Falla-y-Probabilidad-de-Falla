@@ -89,14 +89,14 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula Cota_Zampeado_Calculada en Registros donde sea NULL.\n\n"
-            "Mecanica 1 (si existe campo Profundidad_Inspeccionada):\n"
+            "Calcula Cota_Zampeado_Calculada de los Registros (si es NULL) a traves de dos posibles mecánicas.\n\n"
+            "<strong> Mecánica 1 (si existe campo Profundidad_Inspeccionada):</strong>\n"
             "  Cota_Zampeado_Calculada = Cota_Tapa_Inspeccionada - Profundidad_Inspeccionada\n\n"
-            "Mecanica 2 (si se provee capa Colectores):\n"
-            "  Para cada Colector, toma ZARRIBA y lo asigna al Registro_Inicial.\n"
-            "  Luego calcula: Profundidad_Inspeccionada = Cota_Tapa - Cota_Zampeado_Calculada.\n\n"
-            "Solo se actualizan registros donde Cota_Zampeado_Calculada este en NULL.\n"
-            "Ambas mecanicas pueden correr juntas; Mecanica 1 tiene prioridad."
+            "<strong> Mecanica 2 (si se provee capa Colectores):</strong>\n"
+            "  Para cada Colector, toma la cota de zampeado del registro inicial y lo asigna al Registro_Inicial del colector.\n"
+            "  Luego calcula la Profundidad_Inspeccionada = Cota_Tapa - Cota_Zampeado_Calculada.\n\n"
+            "  Solo se actualizan registros donde Cota_Zampeado_Calculada este en NULL.\n"
+            "  Ambas mecanicas pueden correr juntas pero la Mecanica 1 tiene prioridad."
         )
 
     def createInstance(self):

@@ -90,13 +90,9 @@ class AsignarRegistrosColectores(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Completa Registro_Inicial y Registro_Final en Colectores cuando estan en NULL,\n"
-            "buscando el Registro (punto) mas cercano a cada extremo del colector\n"
-            "dentro de la tolerancia indicada (metros).\n\n"
-            "Es el primer paso del flujo:\n"
-            "  1. Asignar Registro Inicial y Final  ← este algoritmo\n"
-            "  2. Actualizar Registros - Cota Zampeado\n"
-            "  3. Actualizar Colectores Longitud, Cota Zampeado y Pendiente"
+            "Asigna un Registro Inicial y Registro Final a los Colectores cuando estan vacios, buscando el Registro mas cercano a cada extremo del colector\n"
+            "Actualiza la cota de zampeado de los Registros \n"
+            "Actualiza la longitud de los Colectores, Cota Zampeado y Pendiente\n"
         )
 
     def createInstance(self):

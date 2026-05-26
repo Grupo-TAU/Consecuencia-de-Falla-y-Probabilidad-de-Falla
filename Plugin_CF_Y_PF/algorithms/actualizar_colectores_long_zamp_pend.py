@@ -104,17 +104,15 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Requiere haber ejecutado antes:\n"
-            "  1. Asignar Registro Inicial y Final en Colectores\n"
-            "  2. Actualizar Registros - Cota Zampeado\n\n"
-            "Este algoritmo (paso 3):\n"
-            "  - Actualiza Longitud desde la geometria.\n"
-            "  - Copia Cota_Zampeado_Calculada de cada Registro hacia los campos\n"
-            "    de cota ini/fin del colector (solo si estan en NULL).\n"
-            "    Si los campos de cota estan vacios o no se provee Registros,\n"
-            "    se omite el copiado y se usa lo que ya haya en el campo.\n"
-            "  - Recalcula Pendiente = (Cota_Ini - Cota_Fin) / Longitud * 100.\n"
-            "    Si alguna de las cotas es 0, Pendiente = 0."
+            "<strong>Ejecuciones previas requeridas:</strong>\n"
+            "  1. Asignacion de Registro Inicial y Registro Final en Colectores\n"
+            "  2. Actualizar Cota Zampeado en Registros\n\n"
+            "<strong>Este algoritmo:</strong>\n"
+            "  - Actualiza (o crea en caso de no existir) la Longitud de los colectores desde la geometria.\n"
+            "  - Copia la Cota de Zampeado de cada Registro hacia los asignados en colectores como Finales o Iniciales (solo si estan en NULL).\n"
+            "  - Recalcula la Pendiente \n"
+            "  - Si la cota es vacia o no hay registro asignado, se omite el copiado y se usa lo el valor hayado en el campo.\n"
+            "  - Si alguno de los valores de las cotas es 0, la Pendiente es 0.\n"
         )
 
     def createInstance(self):
