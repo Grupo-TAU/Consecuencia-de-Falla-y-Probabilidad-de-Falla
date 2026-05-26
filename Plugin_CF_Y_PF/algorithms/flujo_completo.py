@@ -300,7 +300,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         # ── PASO 8: CF Prox Medio Ambiental ───────────────────────────────────
         if not feedback.isCanceled():
             res8 = _ejecutar(8, "CF Prox Medio Ambiental",
-                             f"{PROVIDER_ID}:CF_Prox_MedioAmbiental",
+                             f"{PROVIDER_ID}:CF_Prox_CursosAgua",
                              {
                                  "COLECTORES":       colectores.id(),
                                  "CURSOS_AGUA":      parameters[self.CURSOS_AGUA],
