@@ -58,10 +58,8 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Aplica a la capa Colectores una simbologia BASADA EN REGLAS.\n\n"
-            "Las reglas automaticas (prefijo [AUTO]) se actualizan en cada "
-            "ejecucion. Las reglas que el usuario agregue manualmente en QGIS "
-            "sin ese prefijo se conservan intactas.\n\n"
+            "Aplica a la capa Colectores una simbologia basada en los resultados de la Consecuencia de Falla Final.\n\n"
+            "Las reglas que el usuario agregue manualmente en QGIS \n\n"
             "Rangos: <=1=Verde, <=2=Verde claro, <=3=Amarillo, "
             "<=4=Naranjo claro, <=5=Naranjo, <=6=Rojo."
         )

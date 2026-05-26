@@ -115,11 +115,8 @@ class CfProfundidad(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun la profundidad maxima de sus registros "
-            "(inicial y final) y escribe el resultado en CF_Profundidad.\n\n"
-            "Si existe el campo Profundidad_Inspeccionada en Registros, se toma "
-            "el maximo entre ambas profundidades. Los limites de clasificacion se "
-            "expresan en metros separados por coma."
+            "Clasifica cada colector segun su punto mas  profundo. Evaluando la profundidad de sus registros adyacentes \n"
+            "Clasifica el resultado en CF_Profundidad, expresando en metros separados por coma los limites de clasificacion."
         )
 
     def createInstance(self):
@@ -150,28 +147,28 @@ class CfProfundidad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_INICIAL,
-                "Nombre campo Registro Inicial en Colectores",
+                "Registro Inicial en capa Colectores",
                 defaultValue=CAMPO_REGISTRO_INICIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_FINAL,
-                "Nombre campo Registro Final en Colectores",
+                "Registro Final en capa Colectores",
                 defaultValue=CAMPO_REGISTRO_FINAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ID_REGISTRO,
-                "Nombre campo ID en Registros",
+                "ID en capa Registros",
                 defaultValue=CAMPO_ID_REGISTRO,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PROFUNDIDAD,
-                "Nombre campo Profundidad en Registros",
+                "Profundidad ",
                 defaultValue=CAMPO_PROFUNDIDAD,
             )
         )
@@ -179,7 +176,7 @@ class CfProfundidad(QgsProcessingAlgorithm):
         # Campo opcional: profundidad inspeccionada
         param_pi = QgsProcessingParameterString(
             PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
-            "Nombre campo Profundidad Inspeccionada en Registros (opcional)",
+            "Profundidad Inspeccionada (opcional en caso de que haya un segundo campo de registro manual)",
             defaultValue=CAMPO_PROFUNDIDAD_INSPECCIONADA,
             optional=True,
         )

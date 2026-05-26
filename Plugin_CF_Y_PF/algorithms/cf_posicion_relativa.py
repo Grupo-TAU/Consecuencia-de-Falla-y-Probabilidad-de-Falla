@@ -103,7 +103,7 @@ def _clasificar_posicion_relativa(valor, limites):
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
 class CfPosicionRelativa(QgsProcessingAlgorithm):
-    """Calcula posicionRelativa, su clasificacion y actualiza Colectores en sitio."""
+    """Calcula la Posicion Relativa, Clasifica y actualiza Colectores."""
 
     def name(self):
         return "calculo_posicion_relativa"
@@ -119,10 +119,11 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula la posicion relativa de cada colector en la red a partir de "
-            "la conectividad (Registro_Inicial / Registro_Final) y la pendiente. "
-            "Escribe el valor numerico en 'posicionRelativa' y su clasificacion "
-            "en 'CF_PosicionRelativa' (o los nombres configurados)."
+            "Calcula el valor de posición relativa siguiendo la red de conexiones, asignandole a cada colector el valor de la suma de la cantidad de tramos que descargan en el. \n"
+            "Si hay varios colectores que parten del mismo nodo, elige el “principal” según la pendiente más alta. \n" 
+            "Ignorando aquellos tramos de tipo AL o EB (u otros configurados). \n\n"
+            "Escribe el valor numerico de la posicion relativa en el campo configurado y lo clasifica segun los rangos configurados\n"
+            "en 'CF_PosicionRelativa', donde 0=sin posicion relativa (tramos aislados), 1=posicion relativa baja, ..., n=posicion relativa alta.\n"
         )
 
     def createInstance(self):
@@ -137,28 +138,28 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_PENDIENTE,
-                "Nombre campo pendiente",
+                "Pendiente ",
                 defaultValue=",".join(PENDIENTE_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_REG_INI,
-                "Nombre campo registro inicial",
+                "Registro inicial",
                 defaultValue=",".join(REGISTRO_INICIAL_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_REG_FIN,
-                "Nombre campo registro final",
+                "Registro final",
                 defaultValue=",".join(REGISTRO_FINAL_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_INSPECCION,
-                "Nombre campo inspeccion (tipo de tramo, ej: Inspeccion, TIPOTRA)",
+                "Tipo de Tramo (clasificacion, ej: Aliviadero AL, Estacion de bombeo EB, etc)",
                 defaultValue=",".join(INSPECCION_CANDIDATOS_DEFAULT),
                 optional=True,
             )
@@ -166,7 +167,7 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_INSPECCION_VALORES,
-                "Valores a ignorar en el campo inspeccion (separados por coma)",
+                "Valores a ignorar del tipo de tramo (separados por coma)",
                 defaultValue=",".join(sorted(INSPECCION_CORTE_VALORES)),
                 optional=True,
             )
@@ -174,14 +175,14 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL,
-                "Nombre campo salida (posicion relativa)",
+                "Nombre campo salida (Posicion relativa)",
                 defaultValue=CAMPO_POS_REL_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL_CLAS,
-                "Nombre campo salida (CF posicion relativa)",
+                "Nombre campo salida clasificacion (CF posicion relativa)",
                 defaultValue=CAMPO_POS_REL_CLAS_DEFAULT,
             )
         )
