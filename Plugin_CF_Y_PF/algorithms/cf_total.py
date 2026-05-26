@@ -152,8 +152,8 @@ class CfTotal(QgsProcessingAlgorithm):
             partial_tokens=("cf", "prof"), exclude_names=(CAMPO_CF_FINAL,),
         )
         idx_x4 = _find_field_index(
-            fields, CAMPO_PROX_CA_CANDIDATOS,
-            partial_tokens=("cf", "curso", "agua"), exclude_names=(CAMPO_CF_FINAL,),
+            fields, CAMPO_PROX_MA_CANDIDATOS,
+            partial_tokens=("cf", "curso"), exclude_names=(CAMPO_CF_FINAL,),
         )
         idx_x5 = _find_field_index(
             fields, CAMPO_PROX_CI_CANDIDATOS,
