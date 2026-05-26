@@ -5,7 +5,7 @@
     <version>0.3.1</version>
     <qgis_minimum_version>3.16</qgis_minimum_version>
     <qgis_maximum_version>4.99</qgis_maximum_version>
-    <homepage>https://github.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla</homepage>
+    <homepage>https://www.grupotau.uy/</homepage>
     <download_url>https://raw.githubusercontent.com/Grupo-TAU/Consecuencia-de-Falla-y-Probabilidad-de-Falla/main/Lanzamientos/Plugin_CF_Y_PF.zip</download_url>
     <author_name>Grupo TAU</author_name>
     <experimental>False</experimental>

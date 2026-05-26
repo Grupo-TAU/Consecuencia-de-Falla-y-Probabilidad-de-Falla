@@ -99,13 +99,13 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula la Probabilidad de Falla (PF) para cada colector a partir "
-            "del campo PACP_Clasificacion y escribe el resultado en el campo PF.\n\n"
-            "Reglas de calculo:\n"
-            "  - Sin datos / vacio: PF = 0\n"
-            "  - 2do caracter letra (ej: 5B): PF = primer digito + 1\n"
-            "  - Ambos primeros digitos (ej: 3222): PF = primeros dos digitos / 10\n"
-            "  - Clasificacion 0000 (sin defectos): PF = 1"
+            "Calcula la Probabilidad de Falla (PF) para cada colector a partir de la clasificación PACP."
+            "El algoritmo transforma el valor de PACP_Clasificacion en un número y lo guarda en el campo PF."
+            "Si el valor está vacío o no existe, PF = 0"
+            "Si el valor tiene dos primeros digitos y el tercer caracter es letra, PF = primer digito + 1 (ej 5B, PF = 6.0)"
+            "Si el código es del tipo 3222, PF = 3.2"
+            "Si el código es 0000, PF = 1"
+            "El campo PF se crea automáticamente si no existe."
         )
 
     def createInstance(self):
