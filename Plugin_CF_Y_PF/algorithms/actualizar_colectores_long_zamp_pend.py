@@ -109,7 +109,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             "  2. Actualizar Cota Zampeado en Registros\n\n"
             "<strong>Este algoritmo:</strong>\n"
             "  - Actualiza (o crea en caso de no existir) la Longitud de los colectores desde la geometria.\n"
-            "  - Copia la Cota de Zampeado de cada Registro hacia los asignados en colectores como Finales o Iniciales (solo si estan en NULL).\n"
+            "  - Copia la Cota de Zampeado de cada Registro hacia los asignados en colectores como Finales o Iniciales (solo si estan vacios).\n"
             "  - Recalcula la Pendiente \n"
             "  - Si la cota es vacia o no hay registro asignado, se omite el copiado y se usa lo el valor hayado en el campo.\n"
             "  - Si alguno de los valores de las cotas es 0, la Pendiente es 0.\n"

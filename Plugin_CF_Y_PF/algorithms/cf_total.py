@@ -95,7 +95,7 @@ class CfTotal(QgsProcessingAlgorithm):
         return "cf_total"
 
     def displayName(self):
-        return "CF Total (CF_Final)"
+        return "Consecuencia de falla Final (CF_Final)"
 
     def group(self):
         return "Personalizados"
@@ -105,15 +105,17 @@ class CfTotal(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula el CF_Final de cada colector combinando los factores de consecuencia "
-            "segun la matriz de ponderacion:\n\n"
+            "Calcula la Consecuencia de Falla Final (CF_Final) de cada colector combinando los factores de consecuencia previamente calculados utilizando la matriz de ponderacion definida para los factores de consecuencia." 
+            "Combina los resultados de 4 componentes ponderados (económicos, sociales, medioambientales y de valorización) en un puntaje final entre 1 y 6. \n\n"
             "  Economico      (30 %): CF_Diametro + CF_Profundidad + CF_AccesoMantenimiento + CF_Ubicacion  [posible: 24]\n"
             "  Social         (30 %): CF_PosicionRelativa + CF_Prox_ClienteImportante + CF_Ubicacion  [posible: 18]\n"
             "  Medioambiental (15 %): CF_Prox_CursosAgua  [posible: 6]\n"
             "  Valorizacion   (25 %): CF_Antiguedad + CF_Material + CF_Obstrucciones  [posible: 18]\n\n"
-            "CF_PONDERADO = (CF_TOTAL / CF_POSIBLE) * CF_FactorDePonderacion\n"
+            "Cada componente se divide por su puntuación máxima posible y se multiplica por su factor de ponderacion.\n\n"
+            "CF_PONDERADO = (CF_TOTAL / CF_POSIBLE) * CF_FactorDePonderacion\n\n"
+            "El resultado total se multiplica por 6 para obtener el CF_Final\n\n"
             "CF_Final     = SUMA(CF_PONDERADO) * 6\n\n"
-            "El resultado se escribe en el campo CF_Final. Si el campo no existe, se crea automáticamente."
+            "Si el campo no existe, se crea automáticamente."
         )
 
     def createInstance(self):

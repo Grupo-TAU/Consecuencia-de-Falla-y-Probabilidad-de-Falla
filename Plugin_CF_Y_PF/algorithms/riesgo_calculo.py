@@ -86,7 +86,7 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         return "riesgo_calculo"
 
     def displayName(self):
-        return "Riesgo Calculo"
+        return "Calculo de Riesgo"
 
     def group(self):
         return "Personalizados"
@@ -96,9 +96,9 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula el riesgo de cada colector como la multiplicación entre CF_Final y PF.\n\n"
-            "Si alguno de los dos valores está vacío o es 0, el algoritmo lo interpreta como 1 para evitar que el riesgo se anule.\n\n"
-            "Si ambos están vacíos, el resultado queda en NULL.\n\n"
+            "Calcula el riesgo de cada colector como la multiplicación entre la Consecuencia de Falla (CF_Final) y la Probabilidad de Falla (PF).\n\n"
+            "Si alguno de los dos valores es vacío o es 0, el algoritmo lo interpreta como 1 para evitar que el riesgo se anule.\n\n"
+            "Si ambos están vacíos, el resultado del riesgo es vacío.\n\n"
             "El campo Riesgo se crea o actualiza automáticamente en la capa de colectores."
         )
 
@@ -121,7 +121,7 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CF_FINAL,
-                "Consecuencia de Falla Final",
+                "Consecuencia de Falla Final ",
                 defaultValue=CAMPO_CF_FINAL_DEFAULT,
             )
         )

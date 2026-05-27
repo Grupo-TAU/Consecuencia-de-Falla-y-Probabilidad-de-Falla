@@ -120,11 +120,10 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun su proximidad a clientes importantes. "
-            "Crea buffers  crecientes al rededor de los clientes y asigna una clase al colector "
-            "según el buffer más cercano que lo intersecta.\n\n" 
-            "Se guarda el resultado en el campo CF_Prox_ClienteImportante y se genera una capa auxiliar con los buffers que permite ver gráficamente los buffers.\n\n"
-        
+            "Clasifica cada colector según su proximidad a los clientes importantes. "
+            "Crea buffers crecientes alrededor de los clientes importantes y asigna una clase al colector "
+            "según el buffer más cercano que lo intersecta.\n\n"
+            "El resultado se guarda en el campo configurado y además se genera una capa auxiliar con los buffers."
         )
 
     def createInstance(self):

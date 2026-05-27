@@ -122,8 +122,8 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
             "Calcula el valor de posición relativa siguiendo la red de conexiones, asignandole a cada colector el valor de la suma de la cantidad de tramos que descargan en el. \n"
             "Si hay varios colectores que parten del mismo nodo, elige el “principal” según la pendiente más alta. \n" 
             "Ignorando aquellos tramos de tipo AL o EB (u otros configurados). \n\n"
-            "Escribe el valor numerico de la posicion relativa en el campo configurado y lo clasifica segun los rangos configurados\n"
-            "en 'CF_PosicionRelativa', donde 0=sin posicion relativa (tramos aislados), 1=posicion relativa baja, ..., n=posicion relativa alta.\n"
+            "Escribe el valor numerico de la posicion relativa en el campo configurado y lo clasifica segun los rangos configurados"
+            "en en campo configurado, donde 0=sin posicion relativa (tramos aislados), 1=posicion relativa baja, ..., n=posicion relativa alta.\n"
         )
 
     def createInstance(self):
@@ -175,14 +175,14 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL,
-                "Nombre campo salida (Posicion relativa)",
+                "Nombre campo salida de la Posicion (Posicion relativa)",
                 defaultValue=CAMPO_POS_REL_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL_CLAS,
-                "Nombre campo salida clasificacion (CF posicion relativa)",
+                "Nombre campo salida de la Clasificacion (CF posicion relativa)",
                 defaultValue=CAMPO_POS_REL_CLAS_DEFAULT,
             )
         )
