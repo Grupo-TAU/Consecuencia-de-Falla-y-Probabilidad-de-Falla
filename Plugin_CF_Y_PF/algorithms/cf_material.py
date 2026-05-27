@@ -90,11 +90,11 @@ class CfMaterial(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector según el material del tramo mediante una asignación de clases por material y guarda el resultado en el campo de salida.\n\n"
-            "Toma el valor del campo de material, lo normaliza para ignorar mayúsculas y acentos, y lo compara con la asignación de clases por material\n"
-            "El resultado se guarda en el campo de salida y los materiales no reconocidos quedan con clase 0.\n\n"
-            "Mapeo por defecto:\n\n"
-            "  PE=1 | PVC=3 | PEAD=3 | Otro Material=3 | Hormigon Armado=4 | Hormigon Simple=5 | Mamposteria=6\n"
+            "Clasifica cada colector según el material del tramo mediante una asignación por material y guarda el resultado en el campo de salida.\n\n"
+            "Toma el valor del campo de material, lo normaliza para ignorar mayúsculas y acentos, y lo compara con la asignación \n\n"
+            "Los materiales no reconocidos quedan con clase 0.\n\n"
+            "Clasificación por defecto:\n\n"
+            "  PE=1 | PVC=3 | PEAD=3 | Otro Material=3 | Hormigon Armado=4 | Hormigon Simple=5 | Mamposteria=6\n\n"
             "El usuario puede configurar el mapeo ingresando pares Material=Clase separados por punto y coma.\n\n"
         )
 

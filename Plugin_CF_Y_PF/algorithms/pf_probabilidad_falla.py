@@ -89,7 +89,7 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
         return "pf_probabilidad_falla"
 
     def displayName(self):
-        return "PF Probabilidad de Falla"
+        return "Probabilidad de Falla (PF)"
 
     def group(self):
         return "Personalizados"
@@ -99,13 +99,14 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula la Probabilidad de Falla (PF) para cada colector a partir de la clasificación PACP."
-            "El algoritmo transforma el valor de PACP_Clasificacion en un número y lo guarda en el campo PF."
-            "Si el valor está vacío o no existe, PF = 0"
-            "Si el valor tiene dos primeros digitos y el tercer caracter es letra, PF = primer digito + 1 (ej 5B, PF = 6.0)"
-            "Si el código es del tipo 3222, PF = 3.2"
-            "Si el código es 0000, PF = 1"
-            "El campo PF se crea automáticamente si no existe."
+            "Calcula la Probabilidad de Falla (PF) para cada colector a partir de la clasificación PACP.\n\n"
+            "El algoritmo transforma el valor de la Clasificacion PACP en un número y lo guarda en el campo PF.\n\n"
+            "El campo PF se crea automáticamente si no existe.\n\n"
+            "Si el valor está vacío, PF = 0\n\n"
+            "Si el valor tiene todos digitos 0 (código es 0000), PF = 1\n\n"
+            "Si el 2do caracter del valor es numerico, PF = primeros dos digitos/10\n\n "
+            "Si el 2do caracter del valor es letra, PF =primer digito/10 + 1 \n\n"
+            
         )
 
     def createInstance(self):
@@ -120,14 +121,14 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PF,
-                "Nombre campo salida (PF)",
+                "Nombre campo salida (Probabilidad de Falla)",
                 defaultValue=CAMPO_PF_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PACP,
-                "Nombre campo PACP Clasificacion",
+                "PACP Clasificacion",
                 defaultValue=CAMPO_PACP_CLASIFICACION_DEFAULT,
             )
         )

@@ -60,8 +60,13 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
         return (
             "Aplica a la capa Colectores una simbologia basada en los resultados de la Consecuencia de Falla Final.\n\n"
             "Las reglas que el usuario agregue manualmente en QGIS \n\n"
-            "Rangos: <=1=Verde, <=2=Verde claro, <=3=Amarillo, "
-            "<=4=Naranjo claro, <=5=Naranjo, <=6=Rojo."
+            "Rangos \n\n"
+            "<=1=Verde \n\n"
+            "<=2=Verde claro \n\n"
+            "<=3=Amarillo \n\n" 
+            "<=4=Naranjo claro \n\n"
+            "<=5=Naranjo\n\n"
+            "<=6=Rojo"
         )
 
     def createInstance(self):

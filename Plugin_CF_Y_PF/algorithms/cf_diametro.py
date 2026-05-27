@@ -115,8 +115,9 @@ class CfDiametro(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return (
             "Clasifica cada colector según su diámetro usando límites configurables en milímetros y guarda el resultado en el campo de salida.\n\n"
-            "Con los valores por defecto (200, 300, 400, 500, 800) se generan \n\n"
-            "6 clases Si el diámetro es menor que 200 mm, asigna 1 \n\n"
+            "Con los valores por defecto (200, 300, 400, 500, 800) se generan "
+            "6 clases \n\n "
+            "Si el diámetro es menor que 200 mm, asigna 1 \n\n"
             "Si es menor que 300 mm, asigna 2\n\n"
             "Si es menor que 400 mm, asigna 3\n\n"
             "Si es menor que 500 mm, asigna 4\n\n"

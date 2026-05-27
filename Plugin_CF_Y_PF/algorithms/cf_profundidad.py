@@ -115,8 +115,9 @@ class CfProfundidad(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector segun su punto mas  profundo. Evaluando la profundidad de sus registros adyacentes \n"
-            "Clasifica el resultado en CF_Profundidad, expresando en metros separados por coma los limites de clasificacion."
+            "Clasifica cada colector según la mayor profundidad registrada en sus registros adyacentes." 
+            "Usa el campo de profundidad de los registros y, si está disponible, también compara con la profundidad inspeccionada para tomar el valor más profundo. \n"
+            "Luego clasifica el resultado en el campo configurado, usando los límites configurados en metros separados por coma. "
         )
 
     def createInstance(self):

@@ -66,13 +66,10 @@ class FlujoCompleto(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Ejecuta todos los pasos del flujo de clasificacion y riesgo en orden.\n\n"
-            "Requiere las capas: Colectores, Registros, Clientes Importantes y "
-            "Cursos de Agua (Medio Ambiental). Corre cada algoritmo secuencialmente "
-            "informando el progreso.\n\n"
-            "Genera dos capas de buffers visibles: una para Clientes Importantes "
-            "y otra para Cursos de Agua.\n\n"
-            "Si algun paso falla, el flujo se detiene y muestra el error."
+            "Ejecuta de forma ordenada todos los codigos para calcular consecuencia de falla final y probabilidad de falla de los colectores y asi calcular su riesgo.\n\n"
+            "Toma la capa de colectores y registros, más capas de apoyo como clientes importantes, cursos de agua y distintos elementos urbanos.\n\n "
+            "Corre cada algoritmo secuencialmente informando el progreso y si algún paso falla, el flujo se detiene y devuelve el error.\n\n"
+            "Genera dos capas de buffers visibles para clientes importantes y cursos de agua, y solo finaliza cuando todos los pasos válidos han corrido correctamente o cuando se produce un error.\n\n"
         )
 
     def createInstance(self):
@@ -102,49 +99,49 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.CURSOS_AGUA,
-                "Capa Cursos de Agua (Medio Ambiental)",
+                "Capa Cursos de Agua ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.CALLES,
-                "Capa Calles (Acceso Mantenimiento)",
+                "Capa Calles",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.ESPACIOS_VERDES,
-                "Capa Espacios Verdes (Acceso Mantenimiento)",
+                "Capa Espacios Verdes ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.ESPACIOS_PEATONALES,
-                "Capa Espacios Peatonales (Acceso Mantenimiento)",
+                "Capa Espacios Peatonales ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.PADRONES,
-                "Capa Padrones (Acceso Mantenimiento)",
+                "Capa Padrones ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.CONSTRUCCIONES,
-                "Capa Construcciones (Acceso Mantenimiento)",
+                "Capa Construcciones ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.ASENTAMIENTOS,
-                "Capa Asentamientos (Acceso Mantenimiento)",
+                "Capa Asentamientos ",
             )
         )
         self.addParameter(
             QgsProcessingParameterFeatureSource(
                 self.VIAS,
-                "Capa Vias (CF Ubicacion)",
+                "Capa Vias ",
                 optional=True,
             )
         )

@@ -29,12 +29,12 @@ BUFFER_BUSQUEDA_DEFAULT     = 10.0   # metros — radio alrededor del punto medi
 # Formato: lista de (subcadena_normalizada, clase) — se evalua en orden,
 # se usa el mayor clase encontrado si el colector intersecta multiples vias.
 TIPO_CLASIFICACION_DEFAULT_STR = (
-    "sin pavimentar:1, s/pavimentar:1, sin pav:1, "
-    "local menor:2, local min:2, "
-    "local mayor:3, local may:3, "
-    "centrica:4, céntrica:4, central:4, "
-    "colectora:5, edificacion:5, "
-    "arteria:6, arterial:6, canal:6"
+    "Sin pavimentar:1"
+    "Local menor:2"
+    "Local mayor:3 "
+    "Céntrica:4"
+    "Vía colectora/Edificaciones:5"
+    "Arteria/Canal:6"
 )
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
@@ -143,29 +143,7 @@ def _build_index_transformed(source, transformador=None):
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
 class CfUbicacion(QgsProcessingAlgorithm):
-    """
-    Clasifica colectores segun el tipo de via sobre la que se encuentran.
-
-    Para cada colector se calcula el PUNTO MEDIO de la linea (al 50 % de su
-    longitud) y se crea un buffer de radio configurable (default 10 m) solo
-    alrededor de ese punto. Esto evita capturar vias de esquinas o cruces que
-    no corresponden al tramo principal del colector.
-
-    Se lee el campo TIPO de cada via que intersecta el buffer del punto medio,
-    se mapea al valor de clasificacion y se asigna al colector el valor MAXIMO
-    entre todas las vias encontradas.
-
-    Tabla de referencia (default):
-        Sin pavimentar             → 1
-        Local menor                → 2
-        Local mayor                → 3
-        Céntrica                   → 4
-        Vía colectora/Edificaciones → 5
-        Arteria/Canal              → 6
-
-    Si no se encuentra ninguna via cerca del punto medio se asigna la clase 1.
-    """
-
+    
     def name(self):
         return "cf_ubicacion"
 
@@ -211,7 +189,7 @@ class CfUbicacion(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_TIPO,
-                "Campo TIPO en la capa Vias",
+                "TIPO en la capa Vias",
                 defaultValue=CAMPO_TIPO_DEFAULT,
             )
         )

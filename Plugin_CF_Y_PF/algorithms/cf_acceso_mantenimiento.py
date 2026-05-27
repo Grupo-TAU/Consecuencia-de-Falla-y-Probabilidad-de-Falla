@@ -153,7 +153,7 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return (
             "Clasifica cada colector segun la accesibilidad para su mantenimiento "
-            "basandose en la informacion espacial de los registros y de varias capaz auxiliares."
+            "basandose en la informacion espacial de los registros y de varias capaz auxiliares.\n\n"
             "Clasifica primero cada registro adyacente y luego asigna al colector el mejor (con menor clasificacion) de sus dos extremos."
         )
 
