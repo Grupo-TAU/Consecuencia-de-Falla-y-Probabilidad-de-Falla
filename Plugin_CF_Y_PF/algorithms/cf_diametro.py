@@ -13,7 +13,7 @@ from qgis.PyQt.QtCore import QVariant
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CAMPO_CF_DIAMETRO = "CF_Diametro"
 CAMPO_DIAMETRO    = "DIAMETRO"
-RANGO_DIAMETRO    = (200.0, 300.0, 400.0, 500.0, 800.0)
+RANGO_DIAMETRO_DEFAULT = "200=1; 300=2; 400=3; 500=4; 800=5"
 
 # ── Nombres de parametros (constantes) ────────────────────────────────────────
 COLECTORES              = "COLECTORES"
@@ -69,30 +69,37 @@ def _to_mm_or_none(value):
         return None
 
 
-def _parse_rango_diametro(text, defaults):
-    if text is None or not str(text).strip():
-        return tuple(defaults)
-    numbers = re.findall(r"[-+]?\d+(?:[\.,]\d+)?", str(text))
-    if not numbers:
-        return tuple(defaults)
+def _parse_rango_diametro(text, default_str):
+    """Parsea 'valor=clase; valor=clase; ...' en lista ordenada de umbrales."""
+    fuente = str(text).strip() if text is not None else ""
+    if not fuente:
+        fuente = default_str
+
     limites = []
-    for num in numbers:
+    for par in fuente.split(";"):
+        par = par.strip()
+        if not par or "=" not in par:
+            continue
+        valor_text, _, clase_text = par.partition("=")
         try:
-            valor = float(num.replace(",", "."))
+            limite = float(valor_text.strip().replace(",", "."))
+            clase = int(clase_text.strip())
         except ValueError:
             continue
-        if valor > 0:
-            limites.append(valor)
+        if limite > 0:
+            limites.append((limite, clase))
+
     if not limites:
-        return tuple(defaults)
-    return tuple(sorted(set(limites)))
+        return _parse_rango_diametro(default_str, default_str)
+
+    return sorted(limites, key=lambda item: item[0])
 
 
-def _clasificar_diametro(diametro_mm, limites_mm):
-    for idx, limite in enumerate(limites_mm, start=1):
+def _clasificar_diametro(diametro_mm, limites):
+    for limite, clase in limites:
         if diametro_mm < limite:
-            return idx
-    return len(limites_mm) + 1
+            return clase
+    return limites[-1][1] + 1
 
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
@@ -147,15 +154,16 @@ class CfDiametro(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_DIAMETRO,
-                "Diametro",
+                "Nombre de campo diámetro de capa Colectores",
                 defaultValue=CAMPO_DIAMETRO,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_RANGO_DIAMETRO,
-                "Rango Diametro (limites mm, separados por coma)",
-                defaultValue=", ".join(str(int(v)) for v in RANGO_DIAMETRO),
+                "Rango Diametro (valor=clase, separados por punto y coma)",
+                defaultValue=RANGO_DIAMETRO_DEFAULT,
+                multiLine=True,
             )
         )
         self.addOutput(
@@ -182,7 +190,7 @@ class CfDiametro(QgsProcessingAlgorithm):
             or CAMPO_DIAMETRO
         )
         texto_rango = self.parameterAsString(parameters, PARAM_RANGO_DIAMETRO, context)
-        rango_cfg   = _parse_rango_diametro(texto_rango, RANGO_DIAMETRO)
+        rango_cfg   = _parse_rango_diametro(texto_rango, RANGO_DIAMETRO_DEFAULT)
 
         fields      = capa_colectores.fields()
         idx_diam    = _find_field_index(fields, campo_diametro)
@@ -194,8 +202,10 @@ class CfDiametro(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Campo diametro detectado : {fields.at(idx_diam).name()}")
         feedback.pushInfo(f"Campo salida CF Diametro : {campo_cf_diametro}")
         feedback.pushInfo(
-            "Rango configurado (mm): "
-            + ", ".join(str(int(v)) if float(v).is_integer() else str(v) for v in rango_cfg)
+            "Rango configurado: "
+            + ", ".join(
+                f"<{limite} => {clase}>" for limite, clase in rango_cfg
+            )
         )
 
         # Crea el campo de salida si no existe

@@ -97,14 +97,14 @@ class CfAntiguedad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_SALIDA,
-                "Nombre campo salida (CF Antiguedad)",
+                "Nombre de campo de salida (CF Antiguedad)",
                 defaultValue=CAMPO_CF_ANTIGUEDAD,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_EDAD,
-                "Antiguedad (años)",
+                "Nombre de campo de antiguedad (años) de capa Colectores",
                 defaultValue=CAMPO_EDAD,
             )
         )

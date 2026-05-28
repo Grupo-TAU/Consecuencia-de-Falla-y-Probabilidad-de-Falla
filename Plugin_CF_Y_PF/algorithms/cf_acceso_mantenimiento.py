@@ -181,28 +181,28 @@ class CfAccesoMantenimiento(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_INICIAL,
-                "Registro Inicial en capa de Colectores",
+                "Nombre de Campo Registro Inicial de capa Colectores",
                 defaultValue=CAMPO_REGISTRO_INICIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_FINAL,
-                "Registro Final en capa de Colectores",
+                "Nombre de Campo Registro Final de capa Colectores",
                 defaultValue=CAMPO_REGISTRO_FINAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ID_REGISTRO,
-                "Campo ID en Registros",
+                "Nombre de Campo ID de capa Registros",
                 defaultValue=CAMPO_ID_REGISTRO,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_TIPO_VIA,
-                "Tipo Via de Calles",
+                "Nombre de Campo Tipo Via de capa Calles",
                 defaultValue=CAMPO_TIPO_VIA,
             )
         )
