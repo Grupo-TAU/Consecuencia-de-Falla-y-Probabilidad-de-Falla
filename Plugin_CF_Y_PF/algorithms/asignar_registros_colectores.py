@@ -106,28 +106,28 @@ class AsignarRegistrosColectores(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_TOLERANCIA_GEOM,
-                "Tolerancia geometrica para asignar Registro_Inicial/Final (metros)",
+                "Tolerancia geometrica para asignar Registro Inicial y Registro Final (en metros)",
                 defaultValue=str(TOLERANCIA_GEOM_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REG_INI,
-                "Campo Registro Inicial (Colectores)",
+                "Nombre de Campo Registro Inicial de capa Colectores",
                 defaultValue=CAMPO_REG_INI_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REG_FIN,
-                "Campo Registro Final (Colectores)",
+                "Nombre de Campo Registro Final de capa Colectores",
                 defaultValue=CAMPO_REG_FIN_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ID_REG,
-                "Campo ID (Registros)",
+                "Nombre de Campo ID de capa Registros",
                 defaultValue=CAMPO_ID_REG_DEFAULT,
             )
         )

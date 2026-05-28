@@ -118,42 +118,42 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_COTA_ZAMP,
-                "Nombre campo salida (Cota Zampeado Calculada)",
+                "Nombre campo salida (Ej: Cota Zampeado Calculada)",
                 defaultValue=CAMPO_COTA_ZAMP_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_COTA_TAPA,
-                "Nombre campo Cota Tapa Inspeccionada",
+                "Nombre campo de Cota Tapa Inspeccionada de capa Registros",
                 defaultValue=CAMPO_COTA_TAPA_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PROF_INSPEC,
-                "Nombre campo Profundidad Inspeccionada",
+                "Nombre campo de Profundidad Inspeccionada de capa Registros",
                 defaultValue=CAMPO_PROF_INSPEC_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ID_REG,
-                "Nombre campo ID en Registros (requerido para Mecanica 2)",
+                "Nombre campo ID de capa Registros (requerido para Mecanica 2)",
                 defaultValue=CAMPO_ID_REG_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ZARRIBA,
-                "Nombre campo ZARRIBA en Colectores (Mecanica 2)",
+                "Nombre campo Cota Zampeado Inicial de capa Colectores (requerido para Mecanica 2)",
                 defaultValue=CAMPO_ZARRIBA_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REG_INI_COL,
-                "Nombre campo Registro_Inicial en Colectores (Mecanica 2)",
+                "Nombre campo Registro Inicial de capa Colectores (requerido para Mecanica 2)",
                 defaultValue=CAMPO_REG_INI_COL_DEFAULT,
             )
         )

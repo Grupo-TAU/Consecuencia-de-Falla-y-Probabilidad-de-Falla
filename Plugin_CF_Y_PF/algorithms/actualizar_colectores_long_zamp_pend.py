@@ -130,46 +130,46 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         # ── Campos Colectores ──────────────────────────────────────────────────
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_LONGITUD, "Campo Longitud (Colectores)",
+                PARAM_CAMPO_LONGITUD, "Nombre del Campo Longitud de capa Colectores",
                 defaultValue=CAMPO_LONGITUD_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_REG_INI, "Campo Registro Inicial (Colectores)",
+                PARAM_CAMPO_REG_INI, "Nombre del Campo Registro Inicial de capa Colectores",
                 defaultValue=CAMPO_REG_INI_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_REG_FIN, "Campo Registro Final (Colectores)",
+                PARAM_CAMPO_REG_FIN, "Nombre del Campo Registro Final de capa Colectores",
                 defaultValue=CAMPO_REG_FIN_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_COTA_INI,
-                "Campo Cota Inicial (Colectores)",
+                "Nombre del Campo Cota Inicial de capa Colectores",
                 defaultValue=CAMPO_COTA_INI_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_COTA_FIN,
-                "Campo Cota Final (Colectores)",
+                "Nombre del Campo Cota Final de capa Colectores",
                 defaultValue=CAMPO_COTA_FIN_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_PENDIENTE, "Campo Pendiente (Colectores)",
+                PARAM_CAMPO_PENDIENTE, "Nombre del Campo Pendiente de capa Colectores",
                 defaultValue=CAMPO_PENDIENTE_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PROF_SALTO,
-                "Campo Prof Salto (Colectores, opcional)",
+                "Nombre del Campo Profundidad Salto de capa Colectores",
                 defaultValue=CAMPO_PROF_SALTO_DEFAULT,
                 optional=True,
             )
@@ -177,19 +177,19 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         # ── Campos Registros ───────────────────────────────────────────────────
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_ID_REG, "Campo ID (Registros)",
+                PARAM_CAMPO_ID_REG, "Nombre del Campo ID de capa Registros",
                 defaultValue=CAMPO_ID_REG_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_COTA_ZAMP, "Campo Cota Zampeado Calculada (Registros)",
+                PARAM_CAMPO_COTA_ZAMP, "Nombre del Campo Cota Zampeado Calculada de capa Registros",
                 defaultValue=CAMPO_COTA_ZAMP_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_PROF_INSPEC, "Campo Profundidad Inspeccionada (Registros)",
+                PARAM_CAMPO_PROF_INSPEC, "Nombre del Campo Profundidad Inspeccionada de capa Registros",
                 defaultValue=CAMPO_PROF_INSPEC_DEFAULT,
             )
         )

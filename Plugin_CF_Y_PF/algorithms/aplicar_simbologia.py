@@ -79,7 +79,7 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 CAMPO,
-                "Campo de clasificacion (valores 1-6)",
+                "Nombre de Campo de salida (Clasificacion CF_Final)",
                 defaultValue="CF_Final",
             )
         )
