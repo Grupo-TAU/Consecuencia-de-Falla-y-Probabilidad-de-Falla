@@ -4,7 +4,7 @@ from .algorithms.cf_diametro import CfDiametro
 from .algorithms.cf_profundidad import CfProfundidad
 from .algorithms.flujo_completo import FlujoCompleto
 from .algorithms.cf_posicion_relativa import CfPosicionRelativa
-from .algorithms.cf_prox_cliente_importante import CfProxClienteImportante as CfProxCliente
+from .algorithms.cf_prox_sitios_interes import CfProxSitiosInteres as CfProxSitios
 from .algorithms.cf_prox_cursos_agua import CfProxCursosAgua
 from .algorithms.cf_total import CfTotal
 from .algorithms.pf_probabilidad_falla import PfProbabilidadFalla as Pf
@@ -27,7 +27,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(CfProfundidad())
         self.addAlgorithm(FlujoCompleto())
         self.addAlgorithm(CfPosicionRelativa())
-        self.addAlgorithm(CfProxCliente())
+        self.addAlgorithm(CfProxSitios())
         self.addAlgorithm(CfProxCursosAgua())
         self.addAlgorithm(CfTotal())
         self.addAlgorithm(Pf())
