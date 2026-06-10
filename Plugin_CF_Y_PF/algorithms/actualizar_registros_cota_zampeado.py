@@ -7,6 +7,7 @@ from qgis.core import (
     QgsProcessingParameterVectorLayer,
 )
 from qgis.PyQt.QtCore import QVariant
+from decimal import Decimal, InvalidOperation
 
 
 def _find_field_index(fields, candidates):
@@ -36,6 +37,30 @@ def _normalize_str(value):
         return ""
     s = str(value).strip()
     return "" if s.upper() == "NULL" else s
+
+
+def _normalize_id(value):
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        s = value.strip()
+    else:
+        s = str(value).strip()
+
+    if not s or s.upper() == "NULL":
+        return ""
+
+    try:
+        normalized = Decimal(s)
+    except (InvalidOperation, ValueError, TypeError):
+        return s
+
+    normalized = normalized.normalize()
+    if normalized == normalized.to_integral():
+        return str(normalized.quantize(1))
+
+    result = format(normalized, 'f').rstrip('0').rstrip('.')
+    return result if result else "0"
 
 
 def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20, field_prec=6):
@@ -293,7 +318,7 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                         )
                     actualizados += 1
                     fids_paso1.add(reg.id())
-                    reg_id = _normalize_str(reg[idx_id_reg]) if idx_id_reg != -1 else str(reg.id())
+                    reg_id = _normalize_id(reg[idx_id_reg]) if idx_id_reg != -1 else str(reg.id())
                     ids_actualizados.append(reg_id)
                     feedback.setProgress(progress_paso1 * i / max(total, 1))
 
@@ -319,7 +344,7 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                 # Indice: ID_registro → feature
                 id_to_feature = {}
                 for reg in registros_list:
-                    id_val = _normalize_str(reg[idx_id_reg])
+                    id_val = _normalize_id(reg[idx_id_reg])
                     if id_val:
                         id_to_feature[id_val] = reg
 
@@ -330,7 +355,7 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
                     if feedback.isCanceled():
                         break
 
-                    reg_ini_id = _normalize_str(col[idx_reg_ini_col])
+                    reg_ini_id = _normalize_id(col[idx_reg_ini_col])
                     if not reg_ini_id:
                         continue
 
@@ -371,7 +396,7 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
                     actualizados += 1
                     actualizados_paso2 += 1
-                    reg_id = _normalize_str(reg_feature[idx_id_reg])
+                    reg_id = _normalize_id(reg_feature[idx_id_reg])
                     ids_actualizados.append(reg_id)
                     feedback.setProgress(
                         progress_paso2_offset + progress_paso2_scale * i / max(len(colectores_list), 1)

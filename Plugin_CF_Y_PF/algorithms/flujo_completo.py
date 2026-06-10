@@ -23,7 +23,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         4. CF Diametro
         5. CF Posicion Relativa
         6. CF Profundidad
-        7. CF Prox Cliente Importante
+        7. CF Prox Sitios de Interés
         8. CF Prox Medio Ambiental
         9. CF Antiguedad
        10. CF Material
@@ -38,7 +38,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
 
     COLECTORES           = "COLECTORES"
     REGISTROS            = "REGISTROS"
-    CLIENTES_IMPORTANTES = "CLIENTES_IMPORTANTES"
+    SITIOS_INTERES      = "SITIOS_INTERES"
     CURSOS_AGUA          = "CURSOS_AGUA"
     CALLES               = "CALLES"
     ESPACIOS_VERDES      = "ESPACIOS_VERDES"
@@ -67,9 +67,9 @@ class FlujoCompleto(QgsProcessingAlgorithm):
     def shortHelpString(self):
         return (
             "Ejecuta de forma ordenada todos los codigos para calcular consecuencia de falla final y probabilidad de falla de los colectores y asi calcular su riesgo.\n\n"
-            "Toma la capa de colectores y registros, más capas de apoyo como clientes importantes, cursos de agua y distintos elementos urbanos.\n\n "
+            "Toma la capa de colectores y registros, más capas de apoyo como sitios de interés, cursos de agua y distintos elementos urbanos.\n\n "
             "Corre cada algoritmo secuencialmente informando el progreso y si algún paso falla, el flujo se detiene y devuelve el error.\n\n"
-            "Genera dos capas de buffers visibles para clientes importantes y cursos de agua, y solo finaliza cuando todos los pasos válidos han corrido correctamente o cuando se produce un error.\n\n"
+            "Genera dos capas de buffers visibles para sitios de interés y cursos de agua, y solo finaliza cuando todos los pasos válidos han corrido correctamente o cuando se produce un error.\n\n"
         )
 
     def createInstance(self):
@@ -91,9 +91,9 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             )
         )
         self.addParameter(
-            QgsProcessingParameterFeatureSource(
-                self.CLIENTES_IMPORTANTES,
-                "Capa Clientes Importantes",
+            QgsProcessingParameterVectorLayer(
+                self.SITIOS_INTERES,
+                "Capa Sitios de Interés",
             )
         )
         self.addParameter(
@@ -148,7 +148,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterFeatureSink(
                 self.BUFFERS_CLIENTES,
-                "Buffers Clientes Importantes (salida)",
+                "Buffers Sitios de Interés (salida)",
             )
         )
         self.addParameter(
@@ -182,8 +182,8 @@ class FlujoCompleto(QgsProcessingAlgorithm):
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
         if registros is None:
             raise QgsProcessingException("No se pudo leer la capa Registros.")
-        if self.parameterAsSource(parameters, self.CLIENTES_IMPORTANTES, context) is None:
-            raise QgsProcessingException("No se pudo leer la capa Clientes Importantes.")
+        if self.parameterAsVectorLayer(parameters, self.SITIOS_INTERES, context) is None:
+            raise QgsProcessingException("No se pudo leer la capa Sitios de Interés.")
         if self.parameterAsSource(parameters, self.CURSOS_AGUA, context) is None:
             raise QgsProcessingException("No se pudo leer la capa Cursos de Agua.")
         for nombre, param in [
@@ -281,13 +281,13 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 7: CF Prox Cliente Importante ────────────────────────────────
+        # ── PASO 7: CF Prox Sitios de Interés ──────────────────────────────
         if not feedback.isCanceled():
-            res7 = _ejecutar(7, "CF Prox Cliente Importante",
-                             f"{PROVIDER_ID}:CF_Prox_ClienteImportante",
+            res7 = _ejecutar(7, "CF Prox Sitios de Interés",
+                             f"{PROVIDER_ID}:CF_Prox_SitiosInteres",
                              {
                                  "COLECTORES":           colectores.id(),
-                                 "CLIENTES_IMPORTANTES": parameters[self.CLIENTES_IMPORTANTES],
+                                 "SITIOS_INTERES":        parameters[self.SITIOS_INTERES],
                                  "BUFFERS_VISIBLES":     parameters[self.BUFFERS_CLIENTES],
                              })
             if res7 is not None:
