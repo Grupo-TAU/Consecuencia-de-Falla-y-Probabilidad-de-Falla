@@ -14,7 +14,7 @@ CAMPO_POS_REL_CANDIDATOS     = ("CF_PosicionRelativa",)
 CAMPO_DIAMETRO_CANDIDATOS    = ("CF_Diametro",)
 CAMPO_PROFUNDIDAD_CANDIDATOS = ("CF_Profundidad",)
 CAMPO_PROX_CA_CANDIDATOS     = ("CF_Prox_CursosAgua",)
-CAMPO_PROX_CI_CANDIDATOS     = ("CF_Prox_ClienteImportante",)
+CAMPO_PROX_CI_CANDIDATOS     = ("CF_Prox_SitiosInteres", "CF_Prox_ClienteImportante")
 CAMPO_ANTIGUEDAD_CANDIDATOS  = ("CF_Antiguedad",)
 CAMPO_MATERIAL_CANDIDATOS    = ("CF_Material",)
 CAMPO_OBSTRUC_CANDIDATOS     = ("CF_Obstrucciones",)
@@ -108,7 +108,7 @@ class CfTotal(QgsProcessingAlgorithm):
             "Calcula la Consecuencia de Falla Final (CF_Final) de cada colector combinando los factores de consecuencia previamente calculados utilizando la matriz de ponderacion definida para los factores de consecuencia." 
             "Combina los resultados de 4 componentes ponderados (económicos, sociales, medioambientales y de valorización) en un puntaje final entre 1 y 6. \n\n"
             "  Economico      (30 %): CF_Diametro + CF_Profundidad + CF_AccesoMantenimiento + CF_Ubicacion  [posible: 24]\n"
-            "  Social         (30 %): CF_PosicionRelativa + CF_Prox_ClienteImportante + CF_Ubicacion  [posible: 18]\n"
+            "  Social         (30 %): CF_PosicionRelativa + CF_Prox_SitiosInteres + CF_Ubicacion  [posible: 18]\n"
             "  Medioambiental (15 %): CF_Prox_CursosAgua  [posible: 6]\n"
             "  Valorizacion   (25 %): CF_Antiguedad + CF_Material + CF_Obstrucciones  [posible: 18]\n\n"
             "Cada componente se divide por su puntuación máxima posible y se multiplica por su factor de ponderacion.\n\n"
@@ -159,7 +159,7 @@ class CfTotal(QgsProcessingAlgorithm):
         )
         idx_x5 = _find_field_index(
             fields, CAMPO_PROX_CI_CANDIDATOS,
-            partial_tokens=("cf", "cliente"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "sitio"), exclude_names=(CAMPO_CF_FINAL,),
         )
         idx_x6 = _find_field_index(
             fields, CAMPO_ANTIGUEDAD_CANDIDATOS,
@@ -188,7 +188,7 @@ class CfTotal(QgsProcessingAlgorithm):
             "CF_Diametro (X_2)":               idx_x2,
             "CF_Profundidad (X_3)":            idx_x3,
             "CF_Prox_CursosAgua (X_4)":        idx_x4,
-            "CF_Prox_ClienteImportante (X_5)": idx_x5,
+            "CF_Prox_SitiosInteres (X_5)": idx_x5,
             "CF_Antiguedad (X_6)":             idx_x6,
             "CF_Material (X_7)":               idx_x7,
             "CF_Obstrucciones (X_8)":          idx_x8,

@@ -23,7 +23,7 @@ from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_ClienteImportante"
+CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_SitiosInteres"
 CAMPO_BUFFER_DISTANCIA_DEFAULT = "distancia_m"
 CAMPO_BUFFER_CLASE_DEFAULT     = "clase_cf"
 
@@ -44,7 +44,7 @@ PALETA_VERDES = {
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES                = "COLECTORES"
-CLIENTES_IMPORTANTES      = "CLIENTES_IMPORTANTES"
+SITIOS_INTERES            = "SITIOS_INTERES"
 BUFFERS_VISIBLES          = "BUFFERS_VISIBLES"
 PARAM_CAMPO_CLASIFICACION = "CAMPO_CLASIFICACION"
 PARAM_RANGOS_BUFFER       = "RANGOS_BUFFER"
@@ -103,14 +103,14 @@ class _PostProcesoBuffersVerdes(QgsProcessingLayerPostProcessorInterface):
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
-class CfProxClienteImportante(QgsProcessingAlgorithm):
-    """Clasifica colectores por cercania a clientes importantes con buffers crecientes."""
+class CfProxSitiosInteres(QgsProcessingAlgorithm):
+    """Clasifica colectores por cercania a sitios de interés con buffers crecientes."""
 
     def name(self):
-        return "CF_Prox_ClienteImportante"
+        return "CF_Prox_SitiosInteres"
 
     def displayName(self):
-        return "CF Prox Cliente Importantes"
+        return "CF Prox Sitios de Interés"
 
     def group(self):
         return "Personalizados"
@@ -120,14 +120,14 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Clasifica cada colector según su proximidad a los clientes importantes. "
-            "Crea buffers crecientes alrededor de los clientes importantes y asigna una clase al colector "
-            "según el buffer más cercano que lo intersecta.\n\n"
+            "Clasifica cada colector según su proximidad a los sitios de interés. "
+            "Utiliza polígonos de sitios de interés y crea buffers crecientes alrededor de cada polígono, "
+            "asignando una clase al colector según el buffer más cercano que lo intersecta.\n\n"
             "El resultado se guarda en el campo configurado y además se genera una capa auxiliar con los buffers."
         )
 
     def createInstance(self):
-        return CfProxClienteImportante()
+        return CfProxSitiosInteres()
 
     # ── Definicion de parametros ───────────────────────────────────────────────
 
@@ -136,12 +136,12 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
             QgsProcessingParameterVectorLayer(COLECTORES, "Colectores")
         )
         self.addParameter(
-            QgsProcessingParameterFeatureSource(CLIENTES_IMPORTANTES, "Clientes importantes")
+            QgsProcessingParameterVectorLayer(SITIOS_INTERES, "Sitios de interés (polígonos)")
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CLASIFICACION,
-                "Nombre campo salida (CF proximidad cliente importante)",
+                "Nombre campo salida (CF proximidad sitio de interés)",
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
             )
         )
@@ -181,12 +181,17 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
         )
 
         capa_lineas = self.parameterAsVectorLayer(parameters, COLECTORES, context)
-        capa_puntos  = self.parameterAsSource(parameters, CLIENTES_IMPORTANTES, context)
+        capa_sitios  = self.parameterAsVectorLayer(parameters, SITIOS_INTERES, context)
 
         if capa_lineas is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
-        if capa_puntos is None:
-            raise QgsProcessingException("No se pudo leer la capa Clientes importantes.")
+        if capa_sitios is None:
+            raise QgsProcessingException("No se pudo leer la capa Sitios de interés.")
+
+        if QgsWkbTypes.geometryType(capa_sitios.wkbType()) != QgsWkbTypes.PolygonGeometry:
+            raise QgsProcessingException(
+                "La capa Sitios de Interés debe ser de polígonos."
+            )
 
         campos_buffers = QgsFields()
         campos_buffers.append(QgsField(campo_buffer_distancia, QVariant.Double, len=12, prec=2))
@@ -253,43 +258,43 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
             geom_lineas[linea.id()] = geom_linea
 
         crs_lineas  = capa_lineas.crs()
-        crs_puntos  = capa_puntos.sourceCrs()
+        crs_sitios  = capa_sitios.sourceCrs()
         requiere_transformacion = (
-            crs_lineas.isValid() and crs_puntos.isValid() and crs_lineas != crs_puntos
+            crs_lineas.isValid() and crs_sitios.isValid() and crs_lineas != crs_sitios
         )
         transformador = None
         if requiere_transformacion:
             transformador = QgsCoordinateTransform(
-                crs_puntos, crs_lineas, QgsProject.instance()
+                crs_sitios, crs_lineas, QgsProject.instance()
             )
             feedback.pushInfo(
-                "Transformando Clientes importantes al CRS de Colectores para calcular buffers."
+                "Transformando Sitios de interés al CRS de Colectores para calcular buffers."
             )
 
-        puntos_geom = []
-        for punto in capa_puntos.getFeatures():
-            if not punto.hasGeometry():
+        geometries_sitios = []
+        for sitio in capa_sitios.getFeatures():
+            if not sitio.hasGeometry():
                 continue
-            geom_punto = punto.geometry()
-            if geom_punto is None or geom_punto.isEmpty():
+            geom_sitio = sitio.geometry()
+            if geom_sitio is None or geom_sitio.isEmpty():
                 continue
             if requiere_transformacion:
                 try:
-                    geom_punto.transform(transformador)
+                    geom_sitio.transform(transformador)
                 except Exception as exc:
                     raise QgsProcessingException(
-                        f"No se pudo transformar geometria de Clientes importantes "
-                        f"(FID {punto.id()}): {exc}"
+                        f"No se pudo transformar geometria de Sitios de interés "
+                        f"(FID {sitio.id()}): {exc}"
                     ) from exc
-            puntos_geom.append(geom_punto)
+            geometries_sitios.append(geom_sitio)
 
-        feedback.pushInfo(f"Puntos validos cargados: {len(puntos_geom)}")
+        feedback.pushInfo(f"Geometrías de sitios válidas cargadas: {len(geometries_sitios)}")
 
         clasificacion_por_fid        = {}
         rangos_ordenados             = sorted(rangos_buffer, key=lambda item: item[0])
         intersectados_globales       = set()
         total_lineas_intersectables  = len(geom_lineas)
-        total_ops = max(len(rangos_ordenados) * max(len(puntos_geom), 1), 1)
+        total_ops = max(len(rangos_ordenados) * max(len(geometries_sitios), 1), 1)
         ops       = 0
         cancelado = False
 
@@ -305,12 +310,12 @@ class CfProxClienteImportante(QgsProcessingAlgorithm):
                     )
                     break
 
-                for geom_punto in puntos_geom:
+                for geom_sitio in geometries_sitios:
                     if feedback.isCanceled():
                         cancelado = True
                         break
 
-                    buffer_geom      = geom_punto.buffer(distancia, 8)
+                    buffer_geom      = geom_sitio.buffer(distancia, 8)
                     candidatos_linea = index_lineas.intersects(buffer_geom.boundingBox())
                     nuevos_globales  = set()
 
