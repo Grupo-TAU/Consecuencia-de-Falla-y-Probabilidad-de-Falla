@@ -110,21 +110,21 @@ class CfMaterial(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_SALIDA,
-                "Nombre campo salida (CF Material)",
+                "Nombre de campo de salida (CF Material)",
                 defaultValue=CAMPO_CF_MATERIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_MAT,
-                "Material ",
+                "Nombre del campo de Material de capa Colectores",
                 defaultValue=CAMPO_MATERIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_MAPEO,
-                "Material=Clase (separado por punto y coma)",
+                "Asignacion Material (Valor=clase, separados por punto y coma)",
                 defaultValue=MAPEO_DEFAULT,
                 multiLine=True,
             )

@@ -160,7 +160,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
         self.addParameter(
            QgsProcessingParameterString(
                 self.CAMPO_SIMBOLOGIA,
-               "Campo para simbologia (valores 1-6)",
+               "Campo de salida (CF_FINAL) (valores 1-6)",
                 defaultValue="CF_Final",
             )
         )

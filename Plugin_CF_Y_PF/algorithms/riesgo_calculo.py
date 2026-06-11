@@ -121,14 +121,14 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CF_FINAL,
-                "Consecuencia de Falla Final ",
+                "Nombre de campo de Consecuencia de Falla Final de capa Colectores",
                 defaultValue=CAMPO_CF_FINAL_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PF,
-                "Probabilidad de Falla",
+                "Nombre de campo de Probabilidad de Falla de capa Colectores",
                 defaultValue=CAMPO_PF_DEFAULT,
             )
         )
