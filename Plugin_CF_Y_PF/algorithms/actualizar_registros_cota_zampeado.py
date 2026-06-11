@@ -38,19 +38,6 @@ def _normalize_str(value):
     return "" if s.upper() == "NULL" else s
 
 
-def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20, field_prec=6):
-    if not layer.dataProvider().addAttributes(
-        [QgsField(field_name, variant_type, len=field_len, prec=field_prec)]
-    ):
-        raise QgsProcessingException(f"No se pudo crear el campo '{field_name}'.")
-    layer.updateFields()
-    fields = layer.fields()
-    idx = _find_field_index(fields, (field_name,))
-    if idx == -1:
-        raise QgsProcessingException(f"El campo '{field_name}' no quedo disponible.")
-    feedback.pushInfo(f"Se creo el campo '{field_name}'.")
-    return idx, fields
-
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CAMPO_COTA_ZAMP_DEFAULT    = "Cota_Zampeado_Calculada"
@@ -205,13 +192,32 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
         fields = registros_layer.fields()
 
+        # ── Inicio de edicion ANTES de crear campos ────────────────────────────
+        inicio_edicion = False
+        if not registros_layer.isEditable():
+            if not registros_layer.startEditing():
+                raise QgsProcessingException(
+                    "No se pudo iniciar el modo de edicion en Registros."
+                )
+            inicio_edicion = True
+
         # Crea Cota_Zampeado_Calculada si no existe
         idx_cota_zamp = _find_field_index(fields, (campo_cota_zamp,))
         if idx_cota_zamp == -1:
-            idx_cota_zamp, fields = _add_field_to_layer(
-                registros_layer, campo_cota_zamp, QVariant.Double, feedback,
-                field_len=20, field_prec=2
-            )
+            if not registros_layer.addAttribute(
+                QgsField(campo_cota_zamp, QVariant.Double, len=20, prec=2)
+            ):
+                raise QgsProcessingException(
+                    f"No se pudo crear el campo '{campo_cota_zamp}' en Registros."
+                )
+            registros_layer.updateFields()
+            fields = registros_layer.fields()
+            idx_cota_zamp = _find_field_index(fields, (campo_cota_zamp,))
+            if idx_cota_zamp == -1:
+                raise QgsProcessingException(
+                    f"El campo '{campo_cota_zamp}' no quedo disponible tras crearlo."
+                )
+            feedback.pushInfo(f"Se creo el campo '{campo_cota_zamp}'.")
 
         idx_cota_tapa   = _find_field_index(fields, (campo_cota_tapa,))
         idx_prof_inspec = _find_field_index(fields, (campo_prof_inspec,))
@@ -224,10 +230,20 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
         # Mecanica 2: crear Profundidad_Inspeccionada si no existe
         if colectores_layer is not None and idx_prof_inspec == -1:
-            idx_prof_inspec, fields = _add_field_to_layer(
-                registros_layer, campo_prof_inspec, QVariant.Double, feedback,
-                field_len=20, field_prec=2
-            )
+            if not registros_layer.addAttribute(
+                QgsField(campo_prof_inspec, QVariant.Double, len=20, prec=2)
+            ):
+                raise QgsProcessingException(
+                    f"No se pudo crear el campo '{campo_prof_inspec}' en Registros."
+                )
+            registros_layer.updateFields()
+            fields = registros_layer.fields()
+            idx_prof_inspec = _find_field_index(fields, (campo_prof_inspec,))
+            if idx_prof_inspec == -1:
+                raise QgsProcessingException(
+                    f"El campo '{campo_prof_inspec}' no quedo disponible tras crearlo."
+                )
+            feedback.pushInfo(f"Se creo el campo '{campo_prof_inspec}'.")
 
         can_run_paso1 = idx_prof_inspec != -1
         can_run_paso2 = colectores_layer is not None
@@ -248,14 +264,6 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
             raise QgsProcessingException(
                 f"No se encontro el campo '{campo_id_reg}' en Registros (requerido para Mecanica 2)."
             )
-
-        inicio_edicion = False
-        if not registros_layer.isEditable():
-            if not registros_layer.startEditing():
-                raise QgsProcessingException(
-                    "No se pudo iniciar el modo de edicion en Registros."
-                )
-            inicio_edicion = True
 
         registros_list   = list(registros_layer.getFeatures())
         total            = len(registros_list)
@@ -379,13 +387,13 @@ class ActualizarRegistrosCotaZampeado(QgsProcessingAlgorithm):
 
                 feedback.pushInfo(f"Mecanica 2: {actualizados_paso2} registros actualizados.")
 
-            if inicio_edicion:
-                if not registros_layer.commitChanges():
-                    errores = "; ".join(registros_layer.commitErrors())
+            if not registros_layer.commitChanges():
+                errores = "; ".join(registros_layer.commitErrors())
+                if inicio_edicion:
                     registros_layer.rollBack()
-                    raise QgsProcessingException(
-                        "No se pudieron guardar los cambios en Registros: " + errores
-                    )
+                raise QgsProcessingException(
+                    "No se pudieron guardar los cambios en Registros: " + errores
+                )
 
         except Exception:
             if inicio_edicion and registros_layer.isEditable():
