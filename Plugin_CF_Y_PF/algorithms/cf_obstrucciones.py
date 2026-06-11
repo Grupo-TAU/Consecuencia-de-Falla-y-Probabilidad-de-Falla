@@ -84,14 +84,14 @@ class CfObstrucciones(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_SALIDA,
-                "Nombre campo salida (CF Obstrucciones)",
+                "Nombre de campo de salida (CF Obstrucciones)",
                 defaultValue=CAMPO_CF_OBSTRUCCIONES,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_OBS,
-                "Nombre campo obstrucciones (entrada)",
+                "Nombre del campo de obstrucciones de capa Colectores",
                 defaultValue=CAMPO_OBSTRUCCIONES,
             )
         )

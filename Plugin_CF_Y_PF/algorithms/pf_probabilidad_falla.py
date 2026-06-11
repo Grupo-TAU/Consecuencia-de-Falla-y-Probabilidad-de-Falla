@@ -128,7 +128,7 @@ class PfProbabilidadFalla(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PACP,
-                "Nombre de campo de Clasificacion  PACP de capa Colectores",
+                "Nombre de campo de Clasificacion PACP de capa Colectores",
                 defaultValue=CAMPO_PACP_CLASIFICACION_DEFAULT,
             )
         )

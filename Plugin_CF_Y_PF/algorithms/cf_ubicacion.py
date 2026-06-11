@@ -27,11 +27,11 @@ BUFFER_SEGUNDA_DEFAULT       = 10.0   # metros — 2da pasada (solo sin intersec
 #   Vía colectora/Edificaciones → 5
 #   Arteria/Canal              → 6
 TIPO_CLASIFICACION_DEFAULT_STR = (
-    "Sin pavimentar:1, "
-    "Local menor:2, "
-    "Local mayor:3, "
-    "Céntrica:4, "
-    "Vía colectora/Edificaciones:5, "
+    "Sin pavimentar:1; "
+    "Local menor:2; "
+    "Local mayor:3; "
+    "Céntrica:4; "
+    "Vía colectora/Edificaciones:5; "
     "Arteria/Canal:6"
 )
 
@@ -49,10 +49,10 @@ OUTPUT_ACTUALIZADAS = "ACTUALIZADAS"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_tipo_mapping(text, default_str):
-    """Convierte 'clave:clase, clave2:clase2' en lista de (clave_lower, int_clase)."""
+    """Convierte 'clave:clase; clave2:clase2' en lista de (clave_lower, int_clase)."""
     source = text if (text and str(text).strip()) else default_str
     result = []
-    for pair in str(source).split(","):
+    for pair in str(source).split(";"):
         pair = pair.strip()
         if ":" not in pair:
             continue
@@ -190,9 +190,9 @@ class CfUbicacion(QgsProcessingAlgorithm):
         return (
             "Clasifica cada colector segun el tipo de via sobre la que esta ubicado.\n\n"
             "Usa DOS PASADAS:\n"
-            "  1ra pasada — todos los colectores con el radio chico (default 10 m).\n"
+            "  1ra pasada — todos los colectores con el radio chico (default 5 m).\n"
             "  2da pasada — solo los que no encontraron via en la 1ra, con el radio "
-            "grande (default 20 m).\n\n"
+            "grande (default 10 m).\n\n"
             "En cada pasada se calcula el PUNTO MEDIO del colector (50 % de su longitud) "
             "y se crea un buffer solo alrededor de ese punto, evitando capturar vias "
             "de esquinas o cruces ajenos al tramo principal.\n\n"
@@ -224,38 +224,38 @@ class CfUbicacion(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_TIPO,
-                "Campo TIPO en la capa Vias",
+                "Nombre de campo TIPO de la capa Vias",
                 defaultValue=CAMPO_TIPO_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CLASIF,
-                "Nombre campo salida (CF Ubicacion)",
+                "Nombre de campo de salida (CF Ubicacion)",
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_BUFFER_1,
-                "Radio 1ra pasada — todos los colectores (metros)",
+                "Radio de la 1ra pasada — todos los colectores (metros)",
                 defaultValue=str(BUFFER_PRIMERA_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_BUFFER_2,
-                "Radio 2da pasada — solo colectores sin via (metros)",
+                "Radio de la 2da pasada — solo colectores sin via (metros)",
                 defaultValue=str(BUFFER_SEGUNDA_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_TIPO_MAPPING,
-                "Mapeo TIPO → clase (formato: valor:clase, ...). Vacio = usar tabla por defecto.",
+                "Asignacion Ubicacion (Valor=clase, separados por punto y coma). Vacio = usar tabla por defecto.",
                 defaultValue=TIPO_CLASIFICACION_DEFAULT_STR,
-                optional=True,
-            )
+                multiLine=True,
+            )      
         )
         self.addOutput(
             QgsProcessingOutputNumber(OUTPUT_ACTUALIZADAS, "Cantidad de colectores actualizados")
