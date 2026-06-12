@@ -30,7 +30,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
        11. CF Acceso Mantenimiento
        12. CF Ubicacion de la Tuberia
        13. CF Obstrucciones
-       14. CF Total
+       14. Criticidad
        15. PF Probabilidad de Falla
        16. Riesgo
        17. Aplicar Simbologia
@@ -161,7 +161,7 @@ class FlujoCompleto(QgsProcessingAlgorithm):
            QgsProcessingParameterString(
                 self.CAMPO_SIMBOLOGIA,
                "Campo para simbologia (valores 1-6)",
-                defaultValue="CF_Final",
+                defaultValue="criticidad",
             )
         )
 
@@ -368,10 +368,10 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                          }) is not None:
                 pasos_ok += 1
 
-        # ── PASO 14: CF Total ──────────────────────────────────────────────────
+        # ── PASO 14: Criticidad ────────────────────────────────────────────────
         if not feedback.isCanceled():
-            if _ejecutar(14, "CF Total",
-                         f"{PROVIDER_ID}:cf_total",
+            if _ejecutar(14, "Criticidad",
+                         f"{PROVIDER_ID}:criticidad",
                          {
                              "COLECTORES": colectores.id(),
                          }) is not None:

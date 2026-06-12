@@ -18,12 +18,12 @@ _PREFIJO = "[AUTO] "
 
 # (expresion, color, etiqueta_sin_prefijo)
 RANGOS = [
-    ('"CF_Final" >= 0 AND "CF_Final" <= 1', QColor("#2CA02C"), "<= 1 - Verde"),
-    ('"CF_Final" >  1 AND "CF_Final" <= 2', QColor("#98DF8A"), "<= 2 - Verde claro"),
-    ('"CF_Final" >  2 AND "CF_Final" <= 3', QColor("#FFFF00"), "<= 3 - Amarillo"),
-    ('"CF_Final" >  3 AND "CF_Final" <= 4', QColor("#FFBB78"), "<= 4 - Naranjo claro"),
-    ('"CF_Final" >  4 AND "CF_Final" <= 5', QColor("#FF7F0E"), "<= 5 - Naranjo"),
-    ('"CF_Final" >  5 AND "CF_Final" <= 6', QColor("#D62728"), "<= 6 - Rojo"),
+    ('"Criticidad" >= 0 AND "Criticidad" <= 1', QColor("#2CA02C"), "<= 1 - Verde"),
+    ('"Criticidad" >  1 AND "Criticidad" <= 2', QColor("#98DF8A"), "<= 2 - Verde claro"),
+    ('"Criticidad" >  2 AND "Criticidad" <= 3', QColor("#FFFF00"), "<= 3 - Amarillo"),
+    ('"Criticidad" >  3 AND "Criticidad" <= 4', QColor("#FFBB78"), "<= 4 - Naranjo claro"),
+    ('"Criticidad" >  4 AND "Criticidad" <= 5', QColor("#FF7F0E"), "<= 5 - Naranjo"),
+    ('"Criticidad" >  5 AND "Criticidad" <= 6', QColor("#D62728"), "<= 6 - Rojo"),
 ]
 
 COLECTORES = "COLECTORES"
@@ -33,8 +33,8 @@ OUTPUT_OK  = "SIMBOLOGIA_OK"
 
 
 def _construir_expresion(campo, expr_base):
-    """Reemplaza 'CF_Final' por el campo elegido por el usuario."""
-    return expr_base.replace('"CF_Final"', f'"{campo}"')
+    """Reemplaza 'Criticidad' por el campo elegido por el usuario."""
+    return expr_base.replace('"Criticidad"', f'"{campo}"')
 
 
 class AplicarSimbologia(QgsProcessingAlgorithm):
@@ -58,7 +58,7 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Aplica a la capa Colectores una simbologia basada en los resultados de la Consecuencia de Falla Final.\n\n"
+            "Aplica a la capa Colectores una simbologia basada en los resultados de la Criticidad del Tramo.\n\n"
             "Las reglas que el usuario agregue manualmente en QGIS \n\n"
             "Rangos \n\n"
             "<=1=Verde \n\n"
@@ -79,8 +79,8 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 CAMPO,
-                "Nombre de Campo de salida (Clasificacion CF_Final)",
-                defaultValue="CF_Final",
+                "Nombre de Campo de salida (Clasificacion Criticidad)",
+                defaultValue="criticidad",
             )
         )
         self.addOutput(

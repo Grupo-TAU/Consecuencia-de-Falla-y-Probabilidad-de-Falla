@@ -8,7 +8,7 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_CF_FINAL = "CF_Final"
+CAMPO_CRITICIDAD = "criticidad"
 
 CAMPO_POS_REL_CANDIDATOS     = ("CF_PosicionRelativa",)
 CAMPO_DIAMETRO_CANDIDATOS    = ("CF_Diametro",)
@@ -88,14 +88,14 @@ def _to_cf_value(value):
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
-class CfTotal(QgsProcessingAlgorithm):
-    """Calcula CF_Final por tramo segun la matriz de ponderacion definida."""
+class Criticidad(QgsProcessingAlgorithm):
+    """Calcula la Criticidad del Tramo (CT) por tramo segun la matriz de ponderacion definida."""
 
     def name(self):
-        return "cf_total"
+        return "criticidad"
 
     def displayName(self):
-        return "Consecuencia de falla Final (CF_Final)"
+        return "Criticidad del Tramo (Criticidad)"
 
     def group(self):
         return "Personalizados"
@@ -105,7 +105,7 @@ class CfTotal(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula la Consecuencia de Falla Final (CF_Final) de cada colector combinando los factores de consecuencia previamente calculados utilizando la matriz de ponderacion definida para los factores de consecuencia." 
+            "Calcula la Criticidad del Tramo de cada colector combinando los factores de consecuencia previamente calculados utilizando la matriz de ponderacion definida para los factores de consecuencia."
             "Combina los resultados de 4 componentes ponderados (económicos, sociales, medioambientales y de valorización) en un puntaje final entre 1 y 6. \n\n"
             "  Economico      (30 %): CF_Diametro + CF_Profundidad + CF_AccesoMantenimiento + CF_Ubicacion  [posible: 24]\n"
             "  Social         (30 %): CF_PosicionRelativa + CF_Prox_SitiosInteres + CF_Ubicacion  [posible: 18]\n"
@@ -113,13 +113,13 @@ class CfTotal(QgsProcessingAlgorithm):
             "  Valorizacion   (25 %): CF_Antiguedad + CF_Material + CF_Obstrucciones  [posible: 18]\n\n"
             "Cada componente se divide por su puntuación máxima posible y se multiplica por su factor de ponderacion.\n\n"
             "CF_PONDERADO = (CF_TOTAL / CF_POSIBLE) * CF_FactorDePonderacion\n\n"
-            "El resultado total se multiplica por 6 para obtener el CF_Final\n\n"
-            "CF_Final     = SUMA(CF_PONDERADO) * 6\n\n"
+            "El resultado total se multiplica por 6 para obtener la Criticidad\n\n"
+            "Criticidad   = SUMA(CF_PONDERADO) * 6\n\n"
             "Si el campo no existe, se crea automáticamente."
         )
 
     def createInstance(self):
-        return CfTotal()
+        return Criticidad()
 
     # ── Definicion de parametros ───────────────────────────────────────────────
 
@@ -143,43 +143,43 @@ class CfTotal(QgsProcessingAlgorithm):
         # ── Busqueda de campos ─────────────────────────────────────────────────
         idx_x1 = _find_field_index(
             fields, CAMPO_POS_REL_CANDIDATOS,
-            partial_tokens=("cf", "pos", "rel"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "pos", "rel"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x2 = _find_field_index(
             fields, CAMPO_DIAMETRO_CANDIDATOS,
-            partial_tokens=("cf", "diam"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "diam"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x3 = _find_field_index(
             fields, CAMPO_PROFUNDIDAD_CANDIDATOS,
-            partial_tokens=("cf", "prof"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "prof"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x4 = _find_field_index(
-            fields, CAMPO_PROX_MA_CANDIDATOS,
-            partial_tokens=("cf", "curso"), exclude_names=(CAMPO_CF_FINAL,),
+            fields, CAMPO_PROX_CA_CANDIDATOS,
+            partial_tokens=("cf", "curso"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x5 = _find_field_index(
             fields, CAMPO_PROX_CI_CANDIDATOS,
-            partial_tokens=("cf", "sitio"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "sitio"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x6 = _find_field_index(
             fields, CAMPO_ANTIGUEDAD_CANDIDATOS,
-            partial_tokens=("cf", "antig"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "antig"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x7 = _find_field_index(
             fields, CAMPO_MATERIAL_CANDIDATOS,
-            partial_tokens=("cf", "mater"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "mater"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x8 = _find_field_index(
             fields, CAMPO_OBSTRUC_CANDIDATOS,
-            partial_tokens=("cf", "obstr"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "obstr"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x9 = _find_field_index(
             fields, CAMPO_ACCESO_CANDIDATOS,
-            partial_tokens=("cf", "acces"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "acces"), exclude_names=(CAMPO_CRITICIDAD,),
         )
         idx_x10 = _find_field_index(
             fields, CAMPO_UBICACION_CANDIDATOS,
-            partial_tokens=("cf", "ubic"), exclude_names=(CAMPO_CF_FINAL,),
+            partial_tokens=("cf", "ubic"), exclude_names=(CAMPO_CRITICIDAD,),
         )
 
         # ── Validacion de campos requeridos ────────────────────────────────────
@@ -213,19 +213,19 @@ class CfTotal(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Campo X_10 detectado: {fields.at(idx_x10).name()}")
 
         # ── Campo de salida ────────────────────────────────────────────────────
-        idx_cf_final = fields.lookupField(CAMPO_CF_FINAL)
-        if idx_cf_final == -1:
+        idx_criticidad = fields.lookupField(CAMPO_CRITICIDAD)
+        if idx_criticidad == -1:
             if not capa_colectores.dataProvider().addAttributes(
-                [QgsField(CAMPO_CF_FINAL, QVariant.Double, len=10, prec=2)]
+                [QgsField(CAMPO_CRITICIDAD, QVariant.Double, len=10, prec=2)]
             ):
                 raise QgsProcessingException(
-                    f"No se pudo crear el campo {CAMPO_CF_FINAL} en Colectores."
+                    f"No se pudo crear el campo {CAMPO_CRITICIDAD} en Colectores."
                 )
             capa_colectores.updateFields()
-            idx_cf_final = capa_colectores.fields().lookupField(CAMPO_CF_FINAL)
-            if idx_cf_final == -1:
+            idx_criticidad = capa_colectores.fields().lookupField(CAMPO_CRITICIDAD)
+            if idx_criticidad == -1:
                 raise QgsProcessingException(
-                    f"El campo {CAMPO_CF_FINAL} no quedo disponible."
+                    f"El campo {CAMPO_CRITICIDAD} no quedo disponible."
                 )
 
         inicio_edicion = False
@@ -250,7 +250,7 @@ class CfTotal(QgsProcessingAlgorithm):
 
         actualizadas     = 0
         ids_actualizados = []
-        idx_id_col       = _find_field_index(fields, ("ID", "id"), exclude_names=(CAMPO_CF_FINAL,))
+        idx_id_col       = _find_field_index(fields, ("ID", "id"), exclude_names=(CAMPO_CRITICIDAD,))
 
         try:
             for i, colector in enumerate(colectores_list, start=1):
@@ -273,18 +273,18 @@ class CfTotal(QgsProcessingAlgorithm):
                 cf_pond_medioambiental = (x4                     / POSIBLE_MEDIOAMBIENTAL) * PESO_MEDIOAMBIENTAL
                 cf_pond_valorizacion   = ((x6 + x7 + x8)        / POSIBLE_VALORIZACION)   * PESO_VALORIZACION
 
-                cf_final = round(
+                criticidad = round(
                     (cf_pond_economico + cf_pond_social + cf_pond_medioambiental + cf_pond_valorizacion) * 6.0,
                     2,
                 )
 
-                valor_actual = _to_float_or_none(colector[idx_cf_final])
-                if valor_actual is None or abs(valor_actual - cf_final) > 1e-9:
+                valor_actual = _to_float_or_none(colector[idx_criticidad])
+                if valor_actual is None or abs(valor_actual - criticidad) > 1e-9:
                     if not capa_colectores.changeAttributeValue(
-                        colector.id(), idx_cf_final, cf_final
+                        colector.id(), idx_criticidad, criticidad
                     ):
                         raise QgsProcessingException(
-                            f"No se pudo actualizar {CAMPO_CF_FINAL} en FID {colector.id()}."
+                            f"No se pudo actualizar {CAMPO_CRITICIDAD} en FID {colector.id()}."
                         )
                     actualizadas += 1
                     col_id = str(colector[idx_id_col]).strip() if idx_id_col != -1 else str(colector.id())

@@ -6,7 +6,7 @@ from .algorithms.flujo_completo import FlujoCompleto
 from .algorithms.cf_posicion_relativa import CfPosicionRelativa
 from .algorithms.cf_prox_sitios_interes import CfProxSitiosInteres as CfProxSitios
 from .algorithms.cf_prox_cursos_agua import CfProxCursosAgua
-from .algorithms.cf_total import CfTotal
+from .algorithms.criticidad import Criticidad
 from .algorithms.pf_probabilidad_falla import PfProbabilidadFalla as Pf
 from .algorithms.riesgo_calculo import RiesgoCalculo as Riesgo
 from .algorithms.asignar_registros_colectores import AsignarRegistrosColectores
@@ -29,7 +29,7 @@ class ColectoresRiesgoProvider(QgsProcessingProvider):
         self.addAlgorithm(CfPosicionRelativa())
         self.addAlgorithm(CfProxSitios())
         self.addAlgorithm(CfProxCursosAgua())
-        self.addAlgorithm(CfTotal())
+        self.addAlgorithm(Criticidad())
         self.addAlgorithm(Pf())
         self.addAlgorithm(Riesgo())
         self.addAlgorithm(AsignarRegistrosColectores())

@@ -9,19 +9,19 @@ from qgis.core import (
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_RIESGO_DEFAULT   = "Riesgo"
-CAMPO_CF_FINAL_DEFAULT = "CF_Final"
-CAMPO_PF_DEFAULT       = "PF"
+CAMPO_RIESGO_DEFAULT     = "Riesgo"
+CAMPO_CRITICIDAD_DEFAULT = "criticidad"
+CAMPO_PF_DEFAULT         = "PF"
 
-CAMPO_CF_FINAL_CANDIDATOS = ("CF_Final", "CF final", "cf_final")
-CAMPO_PF_CANDIDATOS       = ("PF", "pf")
+CAMPO_CRITICIDAD_CANDIDATOS = ("criticidad", "Criticidad", "CT")
+CAMPO_PF_CANDIDATOS         = ("PF", "pf")
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
-COLECTORES           = "COLECTORES"
-PARAM_CAMPO_RIESGO   = "CAMPO_RIESGO"
-PARAM_CAMPO_CF_FINAL = "CAMPO_CF_FINAL"
-PARAM_CAMPO_PF       = "CAMPO_PF"
-OUTPUT_ACTUALIZADAS  = "ACTUALIZADAS"
+COLECTORES             = "COLECTORES"
+PARAM_CAMPO_RIESGO     = "CAMPO_RIESGO"
+PARAM_CAMPO_CRITICIDAD = "CAMPO_CRITICIDAD"
+PARAM_CAMPO_PF         = "CAMPO_PF"
+OUTPUT_ACTUALIZADAS    = "ACTUALIZADAS"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -66,9 +66,9 @@ def _to_float_or_none(value):
         return None
 
 
-def _calcular_riesgo(cf_final, pf):
-    """Calcula el Riesgo como CF_Final x PF. NULL o 0 se tratan como 1."""
-    cf_val = _to_float_or_none(cf_final)
+def _calcular_riesgo(criticidad, pf):
+    """Calcula el Riesgo como Criticidad x PF. NULL o 0 se tratan como 1."""
+    cf_val = _to_float_or_none(criticidad)
     pf_val = _to_float_or_none(pf)
     if cf_val is None and pf_val is None:
         return None
@@ -80,7 +80,7 @@ def _calcular_riesgo(cf_final, pf):
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
 
 class RiesgoCalculo(QgsProcessingAlgorithm):
-    """Calcula el Riesgo como CF_Final x PF."""
+    """Calcula el Riesgo como Criticidad x PF."""
 
     def name(self):
         return "riesgo_calculo"
@@ -96,7 +96,7 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
 
     def shortHelpString(self):
         return (
-            "Calcula el riesgo de cada colector como la multiplicación entre la Consecuencia de Falla (CF_Final) y la Probabilidad de Falla (PF).\n\n"
+            "Calcula el riesgo de cada colector como la multiplicación entre la Criticidad del Tramo (CT) y la Probabilidad de Falla (PF).\n\n"
             "Si alguno de los dos valores es vacío o es 0, el algoritmo lo interpreta como 1 para evitar que el riesgo se anule.\n\n"
             "Si ambos están vacíos, el resultado del riesgo es vacío.\n\n"
             "El campo Riesgo se crea o actualiza automáticamente en la capa de colectores."
@@ -120,9 +120,9 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         )
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_CF_FINAL,
-                "Consecuencia de Falla Final ",
-                defaultValue=CAMPO_CF_FINAL_DEFAULT,
+                PARAM_CAMPO_CRITICIDAD,
+                "Criticidad del Tramo",
+                defaultValue=CAMPO_CRITICIDAD_DEFAULT,
             )
         )
         self.addParameter(
@@ -143,28 +143,28 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         if capa_colectores is None:
             raise QgsProcessingException("No se pudo leer la capa Colectores.")
 
-        campo_riesgo   = self.parameterAsString(parameters, PARAM_CAMPO_RIESGO,   context).strip() or CAMPO_RIESGO_DEFAULT
-        campo_cf_final = self.parameterAsString(parameters, PARAM_CAMPO_CF_FINAL, context).strip() or CAMPO_CF_FINAL_DEFAULT
-        campo_pf       = self.parameterAsString(parameters, PARAM_CAMPO_PF,       context).strip() or CAMPO_PF_DEFAULT
+        campo_riesgo     = self.parameterAsString(parameters, PARAM_CAMPO_RIESGO,     context).strip() or CAMPO_RIESGO_DEFAULT
+        campo_criticidad = self.parameterAsString(parameters, PARAM_CAMPO_CRITICIDAD, context).strip() or CAMPO_CRITICIDAD_DEFAULT
+        campo_pf         = self.parameterAsString(parameters, PARAM_CAMPO_PF,         context).strip() or CAMPO_PF_DEFAULT
 
         feedback.pushInfo(f"Campo salida (Riesgo): {campo_riesgo}")
-        feedback.pushInfo(f"Campo CF Final       : {campo_cf_final}")
+        feedback.pushInfo(f"Campo Criticidad     : {campo_criticidad}")
         feedback.pushInfo(f"Campo PF             : {campo_pf}")
 
         fields = capa_colectores.fields()
 
-        idx_cf_final = _find_field_index(
+        idx_criticidad = _find_field_index(
             fields,
-            (campo_cf_final,) + CAMPO_CF_FINAL_CANDIDATOS,
+            (campo_criticidad,) + CAMPO_CRITICIDAD_CANDIDATOS,
             exclude_names=(campo_riesgo,),
         )
-        if idx_cf_final == -1:
-            idx_cf_final = _find_field_index(
-                fields, (), partial_tokens=("cf", "final"), exclude_names=(campo_riesgo,)
+        if idx_criticidad == -1:
+            idx_criticidad = _find_field_index(
+                fields, (), partial_tokens=("critic",), exclude_names=(campo_riesgo,)
             )
-        if idx_cf_final == -1:
+        if idx_criticidad == -1:
             raise QgsProcessingException(
-                f"No se encontro el campo '{campo_cf_final}' en Colectores."
+                f"No se encontro el campo '{campo_criticidad}' en Colectores."
             )
 
         idx_pf = _find_field_index(
@@ -181,8 +181,8 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                 f"No se encontro el campo '{campo_pf}' en Colectores."
             )
 
-        feedback.pushInfo(f"Campo CF_Final detectado: {fields.at(idx_cf_final).name()}")
-        feedback.pushInfo(f"Campo PF detectado      : {fields.at(idx_pf).name()}")
+        feedback.pushInfo(f"Campo Criticidad detectado: {fields.at(idx_criticidad).name()}")
+        feedback.pushInfo(f"Campo PF detectado        : {fields.at(idx_pf).name()}")
 
         idx_riesgo = fields.lookupField(campo_riesgo)
         if idx_riesgo == -1:
@@ -226,12 +226,12 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
                 if feedback.isCanceled():
                     break
 
-                nuevo_riesgo = _calcular_riesgo(feature[idx_cf_final], feature[idx_pf])
+                nuevo_riesgo = _calcular_riesgo(feature[idx_criticidad], feature[idx_pf])
                 valor_actual = feature[idx_riesgo]
 
                 if i <= 5:
                     feedback.pushInfo(
-                        f"FID {feature.id()}: {campo_cf_final}={feature[idx_cf_final]}, "
+                        f"FID {feature.id()}: {campo_criticidad}={feature[idx_criticidad]}, "
                         f"{campo_pf}={feature[idx_pf]} -> {campo_riesgo}={nuevo_riesgo} (actual: {valor_actual})"
                     )
 
