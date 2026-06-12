@@ -18,7 +18,13 @@ CAMPO_REGISTRO_FINAL            = "Registro_Final"
 CAMPO_ID_REGISTRO               = "ID"
 CAMPO_PROFUNDIDAD               = "PROFUNDIDAD"
 CAMPO_PROFUNDIDAD_INSPECCIONADA = "Profundidad_Inspeccionada"
-RANGO_PROFUNDIDAD               = (2.0, 3.0, 4.0, 5.0, 7.0)
+RANGO_PROFUNDIDAD               = [
+    (2.0, 1),
+    (3.0, 2),
+    (4.0, 3),
+    (5.0, 4),
+    (7.0, 5),
+]
 
 # ── Nombres de parametros (constantes) ────────────────────────────────────────
 COLECTORES                          = "COLECTORES"
@@ -69,31 +75,37 @@ def _to_float_or_none(value):
 
 
 def _parse_rango_profundidad(text, defaults):
-    if text is None or not str(text).strip():
-        return tuple(defaults)
-    numbers = re.findall(r"[-+]?\d+(?:[\.,]\d+)?", str(text))
-    if not numbers:
-        return tuple(defaults)
+    source = str(text).strip() if text is not None else ""
+    if not source:
+        source = "; ".join(f"{int(lim)}={c}" for lim, c in defaults)
+
     limites = []
-    for num in numbers:
+    for pair in source.split(";"):
+        pair = pair.strip()
+        if not pair or "=" not in pair:
+            continue
+        valor_text, _, clase_text = pair.partition("=")
         try:
-            valor = float(num.replace(",", "."))
+            limite = float(valor_text.strip().replace(",", "."))
+            clase = int(clase_text.strip())
         except ValueError:
             continue
-        if valor > 0:
-            limites.append(valor)
+        if limite > 0:
+            limites.append((limite, clase))
+
     if not limites:
-        return tuple(defaults)
-    return tuple(sorted(set(limites)))
+        return _parse_rango_profundidad(None, defaults)
+
+    return sorted(limites, key=lambda item: item[0])
 
 
 def _clasificar_profundidad(profundidad, limites):
     if profundidad is None:
         return None
-    for idx, limite in enumerate(limites, start=1):
+    for limite, clase in limites:
         if profundidad < limite:
-            return idx
-    return len(limites) + 1
+            return clase
+    return limites[-1][1] + 1
 
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
@@ -141,35 +153,35 @@ class CfProfundidad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CF_PROFUNDIDAD,
-                "Nombre campo salida (CF Profundidad)",
+                "Nombre de campo de salida (CF Profundidad)",
                 defaultValue=CAMPO_CF_PROFUNDIDAD,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_INICIAL,
-                "Registro Inicial en capa Colectores",
+                "Nombre de campo Registro Inicial en capa Colectores",
                 defaultValue=CAMPO_REGISTRO_INICIAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_REGISTRO_FINAL,
-                "Registro Final en capa Colectores",
+                "Nombre de campo Registro Final en capa Colectores",
                 defaultValue=CAMPO_REGISTRO_FINAL,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_ID_REGISTRO,
-                "ID en capa Registros",
+                "Nombre de campo Identidad en capa Registros",
                 defaultValue=CAMPO_ID_REGISTRO,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PROFUNDIDAD,
-                "Profundidad ",
+                "Nombre de campo Profundidad en capa Registros",
                 defaultValue=CAMPO_PROFUNDIDAD,
             )
         )
@@ -177,7 +189,7 @@ class CfProfundidad(QgsProcessingAlgorithm):
         # Campo opcional: profundidad inspeccionada
         param_pi = QgsProcessingParameterString(
             PARAM_CAMPO_PROFUNDIDAD_INSPECCIONADA,
-            "Profundidad Inspeccionada (opcional en caso de que haya un segundo campo de registro manual)",
+            "Nombre de campo Profundidad Inspeccionada (opcional en caso de que haya un segundo campo de registro manual)",
             defaultValue=CAMPO_PROFUNDIDAD_INSPECCIONADA,
             optional=True,
         )
@@ -186,8 +198,9 @@ class CfProfundidad(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_RANGO_PROFUNDIDAD,
-                "Rango Profundidad (limites en metros, separados por coma)",
-                defaultValue=", ".join(str(v) for v in RANGO_PROFUNDIDAD),
+                "Rango Profundidad (valor=clase; separados por punto y coma)",
+                defaultValue="; ".join(f"{int(v)}={c}" for v, c in RANGO_PROFUNDIDAD),
+                multiLine=True,
             )
         )
         self.addOutput(
@@ -284,8 +297,8 @@ class CfProfundidad(QgsProcessingAlgorithm):
         else:
             feedback.pushInfo("Campo Profundidad Inspeccionada no encontrado, se usara solo Profundidad.")
         feedback.pushInfo(
-            "Rango configurado (m): "
-            + ", ".join(str(int(v)) if float(v).is_integer() else str(v) for v in rango_cfg)
+            "Rango configurado: "
+            + ", ".join(f"{int(lim)}={clase}" for lim, clase in rango_cfg)
         )
 
         # Construye mapa id_registro -> profundidad_maxima

@@ -57,10 +57,10 @@ def _parse_rangos_buffer(text, defaults):
     if text is None or not str(text).strip():
         return defaults
     rangos = []
-    for pair in str(text).split(","):
+    for pair in str(text).split(";"):
         pair = pair.strip()
-        if ":" in pair:
-            dist_str, clase_str = pair.split(":", 1)
+        if "=" in pair:
+            dist_str, clase_str = pair.split("=", 1)
             try:
                 rangos.append((float(dist_str.strip()), int(clase_str.strip())))
             except ValueError:
@@ -149,8 +149,8 @@ class CfProxSitiosInteres(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_RANGOS_BUFFER,
-                "Rangos buffer (distancia:clase, separados por coma)",
-                defaultValue=", ".join(f"{int(d)}:{c}" for d, c in RANGOS_BUFFER_DEFAULT),
+                "Rango Buffers (Distancia=clase; separados por punto y coma).",
+                defaultValue="; ".join(f"{int(d)}={c}" for d, c in RANGOS_BUFFER_DEFAULT),
             )
         )
         self.addParameter(

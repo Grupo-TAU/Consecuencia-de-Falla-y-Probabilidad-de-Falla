@@ -121,14 +121,14 @@ class RiesgoCalculo(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CRITICIDAD,
-                "Criticidad del Tramo",
+                "Nombre de campo de Criticidad del Tramo de capa Colectores",
                 defaultValue=CAMPO_CRITICIDAD_DEFAULT,
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_PF,
-                "Probabilidad de Falla",
+                "Nombre de campo de Probabilidad de Falla de capa Colectores",
                 defaultValue=CAMPO_PF_DEFAULT,
             )
         )

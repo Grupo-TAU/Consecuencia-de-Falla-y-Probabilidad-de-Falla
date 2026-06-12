@@ -18,7 +18,13 @@ INSPECCION_CANDIDATOS_DEFAULT       = ("Inspeccion",)
 INSPECCION_CORTE_VALORES            = {"AL", "EB"}
 CAMPO_POS_REL_DEFAULT               = "posicionRelativa"
 CAMPO_POS_REL_CLAS_DEFAULT          = "CF_PosicionRelativa"
-RANGO_POS_REL_DEFAULT               = (10.0, 30.0, 70.0, 120.0, 150.0)
+RANGO_POS_REL_DEFAULT               = [
+    (10.0, 1),
+    (30.0, 2),
+    (70.0, 3),
+    (120.0, 4),
+    (150.0, 5),
+]
 
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES               = "Colectores"
@@ -36,23 +42,26 @@ OUTPUT_ACTUALIZADAS      = "ACTUALIZADAS"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_rango_pos_rel(text, defaults):
-    """Convierte el texto de rangos a una tupla de limites."""
-    if text is None or not str(text).strip():
-        return tuple(defaults)
-    numbers = re.findall(r"[-+]?\d+(?:[\.,]\d+)?", str(text))
-    if not numbers:
-        return tuple(defaults)
-    limites = []
-    for num in numbers:
+    source = str(text).strip() if text is not None else ""
+    if not source:
+        source = "; ".join(f"{int(valor)}={clase}" for valor, clase in defaults)
+
+    rangos = []
+    for pair in source.split(";"):
+        pair = pair.strip()
+        if not pair or "=" not in pair:
+            continue
+        valor_text, _, clase_text = pair.partition("=")
         try:
-            valor = float(num.replace(",", "."))
+            valor = float(valor_text.strip().replace(",", "."))
+            clase = int(clase_text.strip())
         except ValueError:
             continue
         if valor > 0:
-            limites.append(valor)
-    if not limites:
-        return tuple(defaults)
-    return tuple(sorted(set(limites)))
+            rangos.append((valor, clase))
+    if not rangos:
+        return _parse_rango_pos_rel(None, defaults)
+    return tuple(sorted(rangos, key=lambda item: item[0]))
 
 
 def _to_float(value):
@@ -94,10 +103,10 @@ def _find_field_index(fields, candidates, partial_tokens=()):
 def _clasificar_posicion_relativa(valor, limites):
     if valor == 0:
         return 0
-    for idx, limite in enumerate(limites, start=1):
+    for limite, clase in limites:
         if valor <= limite:
-            return idx
-    return len(limites) + 1
+            return clase
+    return limites[-1][1] + 1
 
 
 # ── Algoritmo ─────────────────────────────────────────────────────────────────
@@ -138,28 +147,28 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_PENDIENTE,
-                "Pendiente ",
+                "Nombre de campo de Pendiente de capa Colectores",
                 defaultValue=",".join(PENDIENTE_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_REG_INI,
-                "Registro inicial",
+                "Nombre de campo Registro Inicial en capa Colectores",
                 defaultValue=",".join(REGISTRO_INICIAL_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_REG_FIN,
-                "Registro final",
+                "Nombre de campo Registro Final en capa Colectores",
                 defaultValue=",".join(REGISTRO_FINAL_CANDIDATOS_DEFAULT),
             )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_INSPECCION,
-                "Tipo de Tramo (clasificacion, ej: Aliviadero AL, Estacion de bombeo EB, etc)",
+                "Nombre de campo Tipo de Tramo (clasificacion, ej: Aliviadero AL, Estacion de bombeo EB, etc) de capa Colectores ",
                 defaultValue=",".join(INSPECCION_CANDIDATOS_DEFAULT),
                 optional=True,
             )
@@ -167,7 +176,7 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_INSPECCION_VALORES,
-                "Valores a ignorar del tipo de tramo (separados por coma)",
+                "Valores a ignorar del campo \"Tipo de Tramo\" (separados por coma)",
                 defaultValue=",".join(sorted(INSPECCION_CORTE_VALORES)),
                 optional=True,
             )
@@ -175,7 +184,7 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_POS_REL,
-                "Nombre campo salida de la Posicion (Posicion relativa)",
+                "Nombre de campo salida de la Posicion (Posicion relativa)",
                 defaultValue=CAMPO_POS_REL_DEFAULT,
             )
         )
@@ -189,8 +198,9 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_RANGO_POS_REL,
-                "Rango posicion relativa (limites, separados por coma)",
-                defaultValue=", ".join(str(int(v)) for v in RANGO_POS_REL_DEFAULT),
+                "Rango posicion relativa (valor=clase; separados por punto y coma)",
+                defaultValue="; ".join(f"{int(v)}={c}" for v, c in RANGO_POS_REL_DEFAULT),
+                multiLine=True,
             )
         )
         self.addOutput(
@@ -256,7 +266,8 @@ class CfPosicionRelativa(QgsProcessingAlgorithm):
         feedback.pushInfo(f"Campo salida posicion relativa: {campo_pos_rel}")
         feedback.pushInfo(f"Campo salida CF posicion relativa: {campo_pos_rel_clas}")
         feedback.pushInfo(
-            f"Rango posicion relativa configurado: {', '.join(str(int(v)) for v in rango_pos_rel)}"
+            "Rango posicion relativa configurado: "
+            + ", ".join(f"{int(valor)}={clase}" for valor, clase in rango_pos_rel)
         )
 
         colectores_layer = self.parameterAsVectorLayer(parameters, COLECTORES, context)
