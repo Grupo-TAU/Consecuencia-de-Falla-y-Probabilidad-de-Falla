@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <plugins>
-  <pyqgis_plugin name="Consecuencia de Falla y Probabilidad de Falla" version="0.1.2">
+  <pyqgis_plugin name="Consecuencia de Falla y Probabilidad de Falla" version="0.1.3">
     <description>Calculo de factores de clasificacion y riesgo para colectores</description>
-    <version>0.1.2</version>
+    <version>0.1.3</version>
     <qgis_minimum_version>3.16</qgis_minimum_version>
     <qgis_maximum_version>4.99</qgis_maximum_version>
     <homepage>https://www.grupotau.uy/</homepage>
