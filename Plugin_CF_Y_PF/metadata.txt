@@ -1,6 +1,6 @@
 [general]
 name=Consecuencia de Falla y Probabilidad de Falla
-version=0.1.2
+version=0.1.4
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
 description=Herramienta para el cálculo y clasificación del riesgo en redes de colectores.

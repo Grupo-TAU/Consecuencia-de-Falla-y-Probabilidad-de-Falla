@@ -23,7 +23,7 @@ from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtCore import QVariant
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_CursosAgua"
+CAMPO_CLASIFICACION_DEFAULT    = "CF_Prox_MedioAmbiental"
 CAMPO_BUFFER_DISTANCIA_DEFAULT = "distancia_m"
 CAMPO_BUFFER_CLASE_DEFAULT     = "clase_cf"
 
@@ -107,10 +107,10 @@ class CfProxCursosAgua(QgsProcessingAlgorithm):
     """Clasifica colectores por proximidad a cursos de agua con buffers crecientes."""
 
     def name(self):
-        return "CF_Prox_CursosAgua"
+        return "CF_Prox_MedioAmbiental"
 
     def displayName(self):
-        return "CF Cursos de Agua"
+        return "CF Prox Medio Ambiental"
 
     def group(self):
         return "Personalizados"
@@ -141,7 +141,7 @@ class CfProxCursosAgua(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CLASIFICACION,
-                "Nombre campo salida (CF proximidad cursos de agua)",
+                "Nombre campo salida (CF Prox Medio Ambiental)",
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
             )
         )

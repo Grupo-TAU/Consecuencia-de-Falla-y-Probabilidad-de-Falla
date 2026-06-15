@@ -294,11 +294,11 @@ class FlujoCompleto(QgsProcessingAlgorithm):
                 buffers_clientes_id = res7.get("BUFFERS_VISIBLES")
                 pasos_ok += 1
 
-        # ── PASO 8: CF Prox Cursos de Agua ───────────────────────────────────
+        # ── PASO 8: CF Prox Medio Ambiental ──────────────────────────────────
         if not feedback.isCanceled():
-            res8 = _ejecutar(8, "CF Prox Cursos de Agua",
+            res8 = _ejecutar(8, "CF Prox Medio Ambiental",
 
-                             f"{PROVIDER_ID}:CF_Prox_CursosAgua",
+                             f"{PROVIDER_ID}:CF_Prox_MedioAmbiental",
                              {
                                  "COLECTORES":       colectores.id(),
                                  "CURSOS_AGUA":      parameters[self.CURSOS_AGUA],
