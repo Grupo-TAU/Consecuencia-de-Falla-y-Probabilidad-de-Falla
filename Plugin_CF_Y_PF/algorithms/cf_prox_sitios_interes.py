@@ -35,9 +35,9 @@ RANGOS_BUFFER_DEFAULT = [
     (800.0, 2),
 ]
 PALETA_VERDES = {
-    50.0:  "#d97706",
-    100.0: "#f59e0b",
-    200.0: "#fbbf24",
+    50.0:  "#7f2704",
+    100.0: "#b7410e",
+    200.0: "#d95f02",
     400.0: "#fdae6b",
     800.0: "#fee6ce",
 }
@@ -303,33 +303,35 @@ class CfProxSitiosInteres(QgsProcessingAlgorithm):
         idx_id_col       = _fn_lin.get("id", -1)
         ids_actualizados = []
         try:
-            # Generar TODOS los buffers de TODAS las distancias para cada polígono
-            # sin importar si ya hay colectores intersectados
-            for geom_sitio in geometries_sitios:
-                if feedback.isCanceled():
-                    cancelado = True
+            for distancia, clase in rangos_ordenados:
+                if len(intersectados_globales) >= total_lineas_intersectables:
+                    feedback.pushInfo(
+                        "Se detuvo la busqueda de buffers: todos los colectores ya fueron intersectados."
+                    )
                     break
 
-                for distancia, clase in rangos_ordenados:
+                for geom_sitio in geometries_sitios:
                     if feedback.isCanceled():
                         cancelado = True
                         break
 
-                    buffer_geom = geom_sitio.buffer(distancia, 8)
-                    
-                    # Agregar el buffer al sink (siempre, sin condiciones)
-                    feat_buffer = QgsFeature(campos_buffers)
-                    feat_buffer.setGeometry(buffer_geom)
-                    feat_buffer.setAttributes([float(distancia), int(clase)])
-                    sink_buffers.addFeature(feat_buffer, QgsFeatureSink.FastInsert)
-                    
-                    # Procesar intersecciones para clasificar colectores
+                    buffer_geom      = geom_sitio.buffer(distancia, 8)
                     candidatos_linea = index_lineas.intersects(buffer_geom.boundingBox())
+                    nuevos_globales  = set()
+
                     for fid_linea in candidatos_linea:
                         if fid_linea in intersectados_globales:
                             continue
                         geom_linea = geom_lineas.get(fid_linea)
                         if geom_linea is not None and buffer_geom.intersects(geom_linea):
+                            nuevos_globales.add(fid_linea)
+
+                    if nuevos_globales:
+                        feat_buffer = QgsFeature(campos_buffers)
+                        feat_buffer.setGeometry(buffer_geom)
+                        feat_buffer.setAttributes([float(distancia), int(clase)])
+                        sink_buffers.addFeature(feat_buffer, QgsFeatureSink.FastInsert)
+                        for fid_linea in nuevos_globales:
                             intersectados_globales.add(fid_linea)
                             clasificacion_por_fid[fid_linea] = clase
 
