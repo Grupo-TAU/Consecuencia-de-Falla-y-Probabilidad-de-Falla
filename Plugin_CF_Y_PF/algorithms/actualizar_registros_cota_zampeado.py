@@ -38,6 +38,10 @@ def _normalize_str(value):
     s = str(value).strip()
     return "" if s.upper() == "NULL" else s
 
+
+def _normalize_id(value):
+    return _normalize_str(value)
+
 # ── Defaults ──────────────────────────────────────────────────────────────────
 CAMPO_COTA_ZAMP_DEFAULT    = "Cota_Zampeado_Calculada"
 CAMPO_COTA_TAPA_DEFAULT    = "Cota_Tapa_Inspeccionada"

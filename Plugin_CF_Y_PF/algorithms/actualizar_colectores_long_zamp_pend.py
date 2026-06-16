@@ -23,7 +23,7 @@ def _normalize_node(value):
     if value is None:
         return ""
     s = str(value).strip()
-    return "" if s.upper() == "NULL" else s
+    return "" if s.upper() == "NULL" else 
 
 
 def _to_float_or_none(value):

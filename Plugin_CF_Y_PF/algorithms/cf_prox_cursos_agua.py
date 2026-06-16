@@ -141,7 +141,7 @@ class CfProxCursosAgua(QgsProcessingAlgorithm):
         self.addParameter(
             QgsProcessingParameterString(
                 PARAM_CAMPO_CLASIFICACION,
-                "Nombre campo salida (CF Prox Medio Ambiental)",
+                "Nombre campo salida (CF proximidad cursos de agua)",
                 defaultValue=CAMPO_CLASIFICACION_DEFAULT,
             )
         )
