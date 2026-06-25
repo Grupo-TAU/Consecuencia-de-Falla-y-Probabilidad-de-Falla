@@ -59,7 +59,7 @@ def _add_field_to_layer(layer, field_name, variant_type, feedback, field_len=20,
 
 # ── Defaults de campos ────────────────────────────────────────────────────────
 # Colectores
-CAMPO_LONGITUD_DEFAULT   = "Longitud"
+CAMPO_LONG_GEOM_DEFAULT  = "Long_Geometria"
 CAMPO_REG_INI_DEFAULT    = "Registro_Inicial"
 CAMPO_REG_FIN_DEFAULT    = "Registro_Final"
 CAMPO_COTA_INI_DEFAULT   = "Registro_Inicial_Cota_Zampeado"
@@ -74,7 +74,7 @@ CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
 # ── Nombres de parametros ─────────────────────────────────────────────────────
 COLECTORES              = "COLECTORES"
 REGISTROS               = "REGISTROS"
-PARAM_CAMPO_LONGITUD    = "CAMPO_LONGITUD"
+PARAM_CAMPO_LONG_GEOM   = "CAMPO_LONG_GEOM"
 PARAM_CAMPO_REG_INI     = "CAMPO_REG_INI"
 PARAM_CAMPO_REG_FIN     = "CAMPO_REG_FIN"
 PARAM_CAMPO_COTA_INI    = "CAMPO_COTA_INI"
@@ -88,13 +88,13 @@ OUTPUT_ACTUALIZADAS     = "ACTUALIZADAS"
 
 
 class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
-    """Actualiza Longitud, completa cotas zampeadas y recalcula pendiente en Colectores."""
+    """Calcula Long_Geometria, completa cotas zampeadas y recalcula pendiente en Colectores."""
 
     def name(self):
         return "actualizar_colectores_long_zamp_pend"
 
     def displayName(self):
-        return "Actualizar Colectores Longitud, Cota Zampeado y Pendiente"
+        return "Actualizar Colectores Long_Geometria, Cota Zampeado y Pendiente"
 
     def group(self):
         return "Personalizados"
@@ -108,10 +108,11 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             "  1. Asignacion de Registro Inicial y Registro Final en Colectores\n"
             "  2. Actualizar Cota Zampeado en Registros\n\n"
             "<strong>Este algoritmo:</strong>\n"
-            "  - Actualiza (o crea en caso de no existir) la Longitud de los colectores desde la geometria.\n"
+            "  - Calcula (o crea en caso de no existir) el campo Long_Geometria a partir de la geometria del colector. "
+            "El campo Longitud original (medido en campo) no se modifica.\n"
             "  - Copia la Cota de Zampeado de cada Registro hacia los asignados en colectores como Finales o Iniciales (solo si estan vacios).\n"
-            "  - Recalcula la Pendiente \n"
-            "  - Si la cota es vacia o no hay registro asignado, se omite el copiado y se usa lo el valor hayado en el campo.\n"
+            "  - Recalcula la Pendiente usando Long_Geometria.\n"
+            "  - Si la cota es vacia o no hay registro asignado, se omite el copiado y se usa el valor hallado en el campo.\n"
             "  - Si alguno de los valores de las cotas es 0, la Pendiente es 0.\n"
         )
 
@@ -130,8 +131,8 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         # ── Campos Colectores ──────────────────────────────────────────────────
         self.addParameter(
             QgsProcessingParameterString(
-                PARAM_CAMPO_LONGITUD, "Nombre del Campo Longitud de capa Colectores",
-                defaultValue=CAMPO_LONGITUD_DEFAULT,
+                PARAM_CAMPO_LONG_GEOM, "Nombre del Campo Long_Geometria de capa Colectores",
+                defaultValue=CAMPO_LONG_GEOM_DEFAULT,
             )
         )
         self.addParameter(
@@ -210,7 +211,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
             v = self.parameterAsString(parameters, key, context).strip()
             return v or default
 
-        campo_longitud    = _param(PARAM_CAMPO_LONGITUD,  CAMPO_LONGITUD_DEFAULT)
+        campo_long_geom   = _param(PARAM_CAMPO_LONG_GEOM,  CAMPO_LONG_GEOM_DEFAULT)
         campo_reg_ini     = _param(PARAM_CAMPO_REG_INI,   CAMPO_REG_INI_DEFAULT)
         campo_reg_fin     = _param(PARAM_CAMPO_REG_FIN,   CAMPO_REG_FIN_DEFAULT)
         campo_pendiente   = _param(PARAM_CAMPO_PENDIENTE, CAMPO_PENDIENTE_DEFAULT)
@@ -229,10 +230,10 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
         colectores_fields = colectores_layer.fields()
 
         # ── Campos Colectores: auto-crear si no existen ────────────────────────
-        idx_longitud = _find_field_index(colectores_fields, (campo_longitud,))
-        if idx_longitud == -1:
-            idx_longitud, colectores_fields = _add_field_to_layer(
-                colectores_layer, campo_longitud, QVariant.Double, feedback,
+        idx_long_geom = _find_field_index(colectores_fields, (campo_long_geom,))
+        if idx_long_geom == -1:
+            idx_long_geom, colectores_fields = _add_field_to_layer(
+                colectores_layer, campo_long_geom, QVariant.Double, feedback,
                 field_len=20, field_prec=2,
             )
 
@@ -333,10 +334,10 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
 
                 geom = feature.geometry()
                 if geom is not None and not geom.isEmpty():
-                    longitud_calc   = round(float(geom.length()), 2)
-                    longitud_actual = _to_float_or_none(feature[idx_longitud])
-                    if longitud_actual is None or round(longitud_actual, 2) != longitud_calc:
-                        feature[idx_longitud] = longitud_calc
+                    long_geom_calc   = round(float(geom.length()), 2)
+                    long_geom_actual = _to_float_or_none(feature[idx_long_geom])
+                    if long_geom_actual is None or round(long_geom_actual, 2) != long_geom_calc:
+                        feature[idx_long_geom] = long_geom_calc
                         hubo_cambios = True
 
                 if can_copy_cotas:
@@ -376,7 +377,7 @@ class ActualizarColectoresLongZampPend(QgsProcessingAlgorithm):
                 # Pendiente: usar los valores que haya en los campos (copiados o preexistentes)
                 cota_ini_val = _to_float_or_none(feature[idx_cota_ini]) if idx_cota_ini != -1 else None
                 cota_fin_val = _to_float_or_none(feature[idx_cota_fin]) if idx_cota_fin != -1 else None
-                long_aux_val = _to_float_or_none(feature[idx_longitud])
+                long_aux_val = _to_float_or_none(feature[idx_long_geom])
 
                 if (
                     cota_ini_val is not None
