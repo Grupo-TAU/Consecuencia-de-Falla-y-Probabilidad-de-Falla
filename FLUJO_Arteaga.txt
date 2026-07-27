@@ -1,0 +1,89 @@
+================================================================================
+FLUJO DE COMANDOS - PROYECTO ARTEAGA
+================================================================================
+
+CAPAS (cada .gpkg tiene una sola capa, la autodeteccion funciona -> no hace
+falta --layer):
+
+  Colectores -> vsstramoarteaga.gpkg   (capa vsstramoarteaga, MULTILINESTRING, 6289 filas)
+  Registros  -> vsspuntosarteaga.gpkg  (capa vsspuntosarteaga, POINT, 5357 filas)
+
+ATENCION: el archivo "vsstramosarteaga.gpkg" (con "s" despues de tramo) esta
+VACIO (0 bytes). El correcto es "vsstramoarteaga.gpkg" (SIN la "s").
+
+Todos los comandos se corren desde la raiz del repo.
+Los scripts ESCRIBEN IN-PLACE sobre el .gpkg (entrada y salida son el mismo archivo).
+
+Rutas base:
+  Colectores: G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg
+  Registros : G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsspuntosarteaga.gpkg
+
+
+================================================================================
+COMANDOS EN ORDEN DEL FLUJO (12 de 16 pasos ejecutables)
+================================================================================
+
+# 1. Asignar Registro Inicial y Final en Colectores
+python scripts/run_asignar_registros_colectores.py --gpkg-col "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg" --gpkg-reg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsspuntosarteaga.gpkg"
+
+# 2. Actualizar Registros - Cota Zampeado
+python scripts/run_actualizar_registros_cota_zampeado.py --gpkg-reg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsspuntosarteaga.gpkg" --gpkg-col "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 3. Actualizar Colectores Longitud, Cota Zampeado y Pendiente
+python scripts/run_actualizar_colectores_long_zamp_pend.py --gpkg-col "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg" --gpkg-reg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsspuntosarteaga.gpkg"
+
+# 4. CF Diametro
+python scripts/run_cf_diametro.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 5. CF Posicion Relativa
+python scripts/run_cf_posicion_relativa.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 6. CF Profundidad
+python scripts/run_cf_profundidad.py --gpkg-col "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg" --gpkg-reg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsspuntosarteaga.gpkg"
+
+# 9. CF Antiguedad
+python scripts/run_cf_antiguedad.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 10. CF Material
+python scripts/run_cf_material.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 13. CF Obstrucciones
+python scripts/run_cf_obstrucciones.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 14. Criticidad
+python scripts/run_criticidad.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 15. PF Probabilidad de Falla
+python scripts/run_pf_probabilidad_falla.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+# 16. Riesgo
+python scripts/run_riesgo_calculo.py --gpkg "G:\Unidades compartidas\GRUPO TAU\02 - EQUIPO TAU\NA\Arteaga\vsstramoarteaga.gpkg"
+
+
+================================================================================
+PASOS QUE FALTAN - REQUIEREN CAPAS AUXILIARES NO DISPONIBLES
+================================================================================
+
+Estos 4 pasos necesitan capas que NO estan cubiertas por los dos archivos.
+No se pueden correr hasta conseguir esas fuentes:
+
+  Paso 7  - run_cf_prox_sitios_interes.py
+            Falta: Sitios de interes / clientes importantes   --gpkg-sitios
+
+  Paso 8  - run_cf_prox_cursos_agua.py
+            Falta: Cursos de agua (medio ambiental)           --gpkg-cursos
+
+  Paso 11 - run_cf_acceso_mantenimiento.py
+            Falta: Construcciones, Asentamientos, Padrones,
+                   Peatonales, Espacios verdes, Calles
+            --gpkg-constr  --gpkg-asent  --gpkg-pad
+            --gpkg-peat    --gpkg-verde  --gpkg-calles
+
+  Paso 12 - run_cf_ubicacion.py
+            Falta: Vias                                        --gpkg-vias
+
+--------------------------------------------------------------------------------
+RESUMEN: con los dos .gpkg de Arteaga se pueden correr 12 de los 16 pasos.
+Faltan las capas de Vias, Cursos de agua, Sitios de interes y las 6 de
+acceso/mantenimiento.
+================================================================================

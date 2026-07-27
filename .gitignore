@@ -1,0 +1,11 @@
+# Salidas regenerables de la app (capas DatosConsecuenciaDeFalla)
+AnalisisDeDatos/salidas/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# GeoPackage journals de SQLite (nunca versionar sueltos)
+*.gpkg-wal
+*.gpkg-shm

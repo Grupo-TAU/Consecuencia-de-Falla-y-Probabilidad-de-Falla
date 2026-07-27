@@ -1,0 +1,5 @@
+# Dependencias de la app Streamlit y del core cf_pf_core.
+# Instalar con:  pip install -r app/requirements.txt
+geopandas>=1.1
+streamlit>=1.60
+matplotlib>=3.10
