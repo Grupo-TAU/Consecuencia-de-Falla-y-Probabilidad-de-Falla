@@ -26,7 +26,7 @@ CAMPO_REG_FIN_DEFAULT = "Registro_Final"
 CAMPO_ID_REG_DEFAULT = "ID"
 CAMPO_TIPO_VIA_DEFAULT = "Tipo_Via"
 BUFFER_CALLES_DEFAULT = 1.0
-DESCRIPTORES_CLASE_2 = {"local mayor", "autopista/canal", "arteria/edificaciones"}
+DESCRIPTORES_CLASE_2 = {"Local mayor", "Centrica", "Via colectora/Edificaciones", "Arteria/Canal"}
 
 
 def _norm_id(v):

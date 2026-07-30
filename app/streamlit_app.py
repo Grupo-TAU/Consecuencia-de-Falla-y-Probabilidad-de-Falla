@@ -33,6 +33,20 @@ ROLES_AUX = ["vias", "calles", "sitios", "cursos", "construcciones",
 
 
 @st.cache_data(show_spinner=False)
+def _capas(path, mtime):
+    return gpkg_io.listar_capas(path)
+
+
+def capas_de(path):
+    if not path or not os.path.isfile(path):
+        return []
+    try:
+        return _capas(path, os.path.getmtime(path))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+@st.cache_data(show_spinner=False)
 def _cargar(path, layer, mtime):
     return gpd.read_file(path, layer=layer) if layer else gpd.read_file(path)
 
@@ -40,11 +54,37 @@ def _cargar(path, layer, mtime):
 def cargar_gdf(path, layer=None):
     if not path or not os.path.isfile(path):
         return None
+    # Sin capa elegida en un .gpkg con varias, no se lee nada: leer "la primera"
+    # es como se cuelan resultados calculados sobre la capa equivocada.
+    if layer is None and len(capas_de(path)) > 1:
+        return None
     try:
         return _cargar(path, layer, os.path.getmtime(path))
     except Exception as e:  # noqa: BLE001
         st.warning(f"No se pudo leer {os.path.basename(path)}: {e}")
         return None
+
+
+def entrada_capa(caja, etiqueta, valor, key):
+    """Ruta + selector de capa. Devuelve (ruta, capa).
+
+    Cuando el GeoPackage tiene varias capas hay que elegir a mano: no se
+    preselecciona ninguna. Elegir la primera en silencio es justo lo que hace
+    que un error pase desapercibido — hay .gpkg con dos versiones de la misma
+    capa donde una tiene el CRS mal declarado, y el calculo sale mal sin avisar.
+    """
+    # Sin key= en el text_input: asi el value= detectado se aplica al cambiar de
+    # carpeta (con key, Streamlit conserva el estado previo e ignora la deteccion).
+    ruta = caja.text_input(etiqueta, value=valor)
+    capas = capas_de(ruta)
+    if len(capas) <= 1:
+        return ruta, (capas[0] if capas else None)
+    capa = caja.selectbox(f"↳ capa de {etiqueta} ({len(capas)} disponibles)",
+                          capas, index=None, placeholder="Elegí la capa…",
+                          key=f"layer_{key}")
+    if capa is None:
+        caja.caption("⚠️ Este GeoPackage tiene varias capas: elegí cuál usar.")
+    return ruta, capa
 
 
 # ─────────────────────────── Barra lateral: proyecto ────────────────────────
@@ -59,16 +99,18 @@ if carpeta and os.path.isdir(carpeta):
 elif carpeta:
     st.sidebar.error("No existe esa carpeta.")
 
-col_path = st.sidebar.text_input("Capa Colectores", value=detectadas.get("colectores", ""))
-reg_path = st.sidebar.text_input("Capa Registros", value=detectadas.get("registros", ""))
+col_path, col_layer = entrada_capa(st.sidebar, "Capa Colectores",
+                                   detectadas.get("colectores", ""), "col")
+reg_path, reg_layer = entrada_capa(st.sidebar, "Capa Registros",
+                                   detectadas.get("registros", ""), "reg")
 
 with st.sidebar.expander("Capas auxiliares", expanded=bool(detectadas)):
-    # Sin key= explicito: asi el value= detectado se aplica al cambiar de carpeta
-    # (con key, Streamlit conserva el estado previo e ignora la deteccion).
-    aux_paths = {rol: st.text_input(rol.capitalize(), value=detectadas.get(rol, ""))
+    caja_aux = st.container()
+    aux_capas = {rol: entrada_capa(caja_aux, rol.capitalize(),
+                                   detectadas.get(rol, ""), f"aux_{rol}")
                  for rol in ROLES_AUX}
 
-colectores = cargar_gdf(col_path)
+colectores = cargar_gdf(col_path, col_layer)
 clave = None
 if colectores is not None:
     opciones_clave = [c for c in colectores.columns if c != colectores.geometry.name]
@@ -126,6 +168,7 @@ with tab_prep:
                 try:
                     preparacion.correr(
                         key_paso, gpkg_col=col_path, gpkg_reg=reg_path or None,
+                        layer_col=col_layer, layer_reg=reg_layer,
                         config=config_prep,
                         log=lambda m, n="info": mensajes.append((n, m)))
                     ok = True
@@ -153,8 +196,8 @@ with tab_calc:
     if colectores is None:
         st.info("Indicá la capa de Colectores en la barra lateral para empezar.")
     else:
-        registros = cargar_gdf(reg_path)
-        aux = {rol: cargar_gdf(p) for rol, p in aux_paths.items() if p}
+        registros = cargar_gdf(reg_path, reg_layer)
+        aux = {rol: cargar_gdf(p, capa) for rol, (p, capa) in aux_capas.items() if p}
 
         st.markdown("### Configuración")
         st.caption("Cada campo viene con su nombre por defecto — editalo si en tu capa se llama distinto.")
@@ -210,12 +253,21 @@ with tab_calc:
             st.success(f"Listo → {out_path}")
 
         st.markdown("**Cálculo individual**")
+        st.caption("Un paso solo se puede correr aunque no hayas calculado el resto: "
+                   "los CF que le falten los toma de lo que ya haya en el GeoPackage "
+                   "de salida y, si no, de las columnas que la propia capa de "
+                   "Colectores ya traiga cargadas.")
         cols_btn = st.columns(3)
         for i, (key, label, requiere, _fn) in enumerate(flujo.PASOS):
             if cols_btn[i % 3].button(label, key=f"calc_{key}"):
                 registro_log = []
+                # Lo que dejaron las corridas anteriores: sin esto, un paso que
+                # combina CF (criticidad, riesgo) no encontraria nada.
+                base = None
+                if gpkg_io.capa_existe(out_path, gpkg_io.LAYER_SALIDA_DEFAULT):
+                    base = gpkg_io.leer_capa(out_path, gpkg_io.LAYER_SALIDA_DEFAULT)
                 res = flujo.correr(colectores, registros=registros, aux=aux, config=config,
-                                   clave=clave, solo=[key],
+                                   clave=clave, solo=[key], base=base,
                                    log=lambda m, n: registro_log.append((n, m)))
                 gpkg_io.escribir_resultados(res, out_path, clave=clave)
                 for nivel, msg in registro_log:

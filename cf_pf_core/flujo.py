@@ -191,6 +191,26 @@ PASOS = [
 
 PASOS_POR_KEY = {p[0]: p for p in PASOS}
 
+# Columnas que produce cada paso. Con esto se sabe que columnas de la capa fuente
+# son "resultados ya calculados" y se pueden reaprovechar (ver _previas_de_fuente).
+COLUMNAS_POR_PASO = {
+    "diametro": ["CF_Diametro"],
+    "posicion_relativa": ["posicionRelativa", "CF_PosicionRelativa"],
+    "profundidad": ["CF_Profundidad"],
+    "prox_sitios": ["CF_Prox_SitiosInteres"],
+    "prox_medioamb": ["CF_Prox_MedioAmbiental"],
+    "antiguedad": ["CF_Antiguedad"],
+    "material": ["CF_Material"],
+    "acceso": ["CF_Acceso_Mantenimiento"],
+    "ubicacion": ["CF_Ubicacion"],
+    "obstrucciones": ["CF_Obstrucciones"],
+    "pf": ["PF"],
+    "criticidad": ["criticidad"],
+    "riesgo": ["Riesgo"],
+}
+
+COLUMNAS_SALIDA = [c for cols in COLUMNAS_POR_PASO.values() for c in cols]
+
 # Roles auxiliares que un paso aprovecha si estan disponibles, pero que no le
 # impiden correr si faltan (a diferencia de los de `requiere`).
 ROLES_OPCIONALES = {
@@ -289,11 +309,31 @@ def campos_config(key):
     return [*comunes, *CONFIG_CAMPOS.get(key, [])]
 
 
+def _nombres_conocidos():
+    """Nombres de columna de resultado, en minusculas, incluidos los alias viejos."""
+    conocidos = {c.lower() for c in COLUMNAS_SALIDA}
+    for alias in criticidad.ALIASES.values():
+        conocidos.update(a.lower() for a in alias)
+    return conocidos
+
+
+def previas_de_fuente(colectores_gdf):
+    """Columnas de resultado que la capa de Colectores ya trae calculadas.
+
+    Muchas capas de trabajo ya tienen los CF_* cargados de corridas anteriores
+    (hechas con el plugin viejo, o a mano). Reaprovecharlas permite recalcular un
+    solo paso —tipico: Criticidad— sin tener que rehacer todos los CF antes.
+    """
+    conocidos = _nombres_conocidos()
+    return [c for c in colectores_gdf.columns if c.lower() in conocidos]
+
+
 def _base_resultados(colectores_gdf, clave):
+    """Acumulador inicial: clave + geometria + lo que la fuente ya traiga calculado."""
     geom = colectores_gdf.geometry.name
     cols = [c for c in (clave, geom) if c is not None]
-    base = colectores_gdf[cols].copy()
-    return base
+    cols += [c for c in previas_de_fuente(colectores_gdf) if c not in cols]
+    return colectores_gdf[cols].copy()
 
 
 def resolver_clave(colectores_gdf, clave=None):
@@ -323,6 +363,12 @@ def _reenganchar(resultados, base, clave):
     geom = resultados.geometry.name
     orden = resultados.index
     izq = resultados.copy()
+    # La capa de salida manda sobre lo que trajera la fuente: es lo que calculo
+    # esta herramienta. Se descartan las repetidas antes de unir (ademas evita
+    # que el merge las renombre a _x/_y).
+    repetidas = [c for c in previas if c in izq.columns]
+    if repetidas:
+        izq = izq.drop(columns=repetidas)
     izq["__clave"] = izq[clave].map(normalizar_clave)
     unido = izq.merge(aporte, on="__clave", how="left").drop(columns="__clave")
     unido.index = orden
@@ -336,8 +382,14 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
 
     solo: lista de keys de PASOS a ejecutar; None = todos.
     base: resultados de una corrida anterior (la capa DatosConsecuenciaDeFalla).
-          Sus columnas se reenganchan antes de empezar, para que un paso suelto
-          como 'criticidad' vea los CF_* que ya estaban calculados.
+
+    De donde salen los CF que un paso necesita pero no calcula (el caso de
+    'criticidad' y 'riesgo'), de menor a mayor prioridad:
+      1. la propia capa de Colectores, si ya los trae cargados;
+      2. `base`, o sea lo que dejaron las corridas anteriores;
+      3. lo que se calcule en esta corrida.
+    Asi se puede recalcular un solo paso sobre una capa que ya venia con los CF
+    hechos, sin tener que rehacerlos todos primero.
     """
     def _log(msg, nivel="info"):
         if log:
@@ -345,9 +397,18 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
 
     clave = resolver_clave(colectores_gdf, clave)
     ctx = Contexto(colectores_gdf, registros, aux, config)
-    ctx.resultados = _reenganchar(_base_resultados(colectores_gdf, clave), base, clave)
 
     keys = solo if solo is not None else [p[0] for p in PASOS]
+
+    # Lo que se reaprovecha se avisa: si un paso no se corre y su columna sale de
+    # la fuente, el usuario tiene que poder distinguirlo de un valor recien calculado.
+    a_calcular = {c.lower() for k in keys for c in COLUMNAS_POR_PASO.get(k, [])}
+    reusadas = [c for c in previas_de_fuente(colectores_gdf) if c.lower() not in a_calcular]
+    if reusadas:
+        _log("Se reusan columnas ya presentes en Colectores: " + ", ".join(reusadas))
+
+    ctx.resultados = _reenganchar(_base_resultados(colectores_gdf, clave), base, clave)
+
     for key in keys:
         if key not in PASOS_POR_KEY:
             _log(f"Paso desconocido: {key}", "warn")
