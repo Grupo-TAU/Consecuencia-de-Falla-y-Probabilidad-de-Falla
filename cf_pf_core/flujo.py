@@ -14,6 +14,9 @@ Cada paso es una entrada de PASOS con:
 
 Los pasos individuales tambien se exponen para correr de a uno desde la app.
 """
+import geopandas as gpd
+
+from cf_pf_core.claves import normalizar as normalizar_clave
 from cf_pf_core.calculos import (
     acceso_mantenimiento,
     antiguedad,
@@ -37,6 +40,14 @@ def _col(gdf, *cands):
         if n and n.lower() in lower:
             return lower[n.lower()]
     return None
+
+
+def _lista_descriptores(texto):
+    """'a, b, c' -> {'a','b','c'}. Vacio -> None (usa los descriptores del calculo)."""
+    if not texto or not str(texto).strip():
+        return None
+    partes = [p.strip().lower() for p in str(texto).split(",") if p.strip()]
+    return set(partes) or None
 
 
 class Contexto:
@@ -68,7 +79,12 @@ def paso_material(ctx):
 
 def paso_antiguedad(ctx):
     c = _col(ctx.colectores, ctx.cfg("antiguedad_campo", "Antiguedad"), "Antiguedad")
-    return {"CF_Antiguedad": antiguedad.calcular(ctx.colectores, campo_edad=c)}
+    return {"CF_Antiguedad": antiguedad.calcular(
+        ctx.colectores, campo_edad=c,
+        limites=antiguedad.parse_enteros(ctx.cfg("antiguedad_limites", None),
+                                         antiguedad.LIMITES_DEFAULT),
+        clases=antiguedad.parse_enteros(ctx.cfg("antiguedad_clases", None),
+                                        antiguedad.CLASES_DEFAULT))}
 
 
 def paso_obstrucciones(ctx):
@@ -104,6 +120,8 @@ def paso_ubicacion(ctx):
     return {"CF_Ubicacion": ubicacion.calcular(
         ctx.colectores, ctx.aux["vias"],
         campo_tipo=ctx.cfg("ubicacion_campo_tipo", ubicacion.CAMPO_TIPO_DEFAULT),
+        buffer_1=float(ctx.cfg("ubicacion_buffer_1", ubicacion.BUFFER_1_DEFAULT)),
+        buffer_2=float(ctx.cfg("ubicacion_buffer_2", ubicacion.BUFFER_2_DEFAULT)),
         mapping=ctx.cfg("ubicacion_mapping", ubicacion.TIPO_MAPPING_DEFAULT),
     )}
 
@@ -133,6 +151,9 @@ def paso_acceso(ctx):
         campo_reg_fin=ctx.cfg("reg_fin_campo", acceso_mantenimiento.CAMPO_REG_FIN_DEFAULT),
         campo_id_reg=ctx.cfg("id_reg_campo", acceso_mantenimiento.CAMPO_ID_REG_DEFAULT),
         campo_tipo_via=ctx.cfg("acceso_campo_tipo_via", acceso_mantenimiento.CAMPO_TIPO_VIA_DEFAULT),
+        descriptores_clase2=_lista_descriptores(ctx.cfg("acceso_descriptores_cl2", None)),
+        buffer_calles=float(ctx.cfg("acceso_buffer_calles",
+                                    acceso_mantenimiento.BUFFER_CALLES_DEFAULT)),
     )}
 
 
@@ -170,6 +191,20 @@ PASOS = [
 
 PASOS_POR_KEY = {p[0]: p for p in PASOS}
 
+# Roles auxiliares que un paso aprovecha si estan disponibles, pero que no le
+# impiden correr si faltan (a diferencia de los de `requiere`).
+ROLES_OPCIONALES = {
+    "acceso": ["construcciones", "asentamientos", "padrones", "peatonales",
+               "verde", "calles"],
+}
+
+
+def roles_usados(key):
+    """Roles auxiliares que tiene sentido pasarle a un paso: obligatorios + opcionales."""
+    if key not in PASOS_POR_KEY:
+        return []
+    return [*PASOS_POR_KEY[key][2], *ROLES_OPCIONALES.get(key, [])]
+
 
 # Metadata para la app: campos editables por seccion.
 # (config_key, etiqueta, valor_default). "comunes" agrupa columnas compartidas.
@@ -189,6 +224,10 @@ CONFIG_CAMPOS = {
     ],
     "antiguedad": [
         ("antiguedad_campo", "Columna Antigüedad", antiguedad.CAMPO_EDAD_DEFAULT),
+        ("antiguedad_limites", "Límites de años",
+         ", ".join(str(x) for x in antiguedad.LIMITES_DEFAULT)),
+        ("antiguedad_clases", "Clases (una más que los límites)",
+         ", ".join(str(x) for x in antiguedad.CLASES_DEFAULT)),
     ],
     "obstrucciones": [
         ("obstrucciones_campo", "Columna Obstrucciones", obstrucciones.CAMPO_OBS_DEFAULT),
@@ -206,6 +245,8 @@ CONFIG_CAMPOS = {
     ],
     "ubicacion": [
         ("ubicacion_campo_tipo", "Columna TIPO (Vías)", ubicacion.CAMPO_TIPO_DEFAULT),
+        ("ubicacion_buffer_1", "Buffer 1 (m)", ubicacion.BUFFER_1_DEFAULT),
+        ("ubicacion_buffer_2", "Buffer 2 (m)", ubicacion.BUFFER_2_DEFAULT),
         ("ubicacion_mapping", "Mapeo TIPO", ubicacion.TIPO_MAPPING_DEFAULT),
     ],
     "prox_sitios": [
@@ -216,6 +257,10 @@ CONFIG_CAMPOS = {
     ],
     "acceso": [
         ("acceso_campo_tipo_via", "Columna Tipo_Via (Calles)", acceso_mantenimiento.CAMPO_TIPO_VIA_DEFAULT),
+        ("acceso_descriptores_cl2", "Descriptores de clase 2 (coma)",
+         ", ".join(sorted(acceso_mantenimiento.DESCRIPTORES_CLASE_2))),
+        ("acceso_buffer_calles", "Buffer de calles (m)",
+         acceso_mantenimiento.BUFFER_CALLES_DEFAULT),
     ],
     "pf": [
         ("pf_campo_pacp", "Columna PACP (vacío = autodetecta)", ""),
@@ -224,6 +269,24 @@ CONFIG_CAMPOS = {
 
 # Etiquetas legibles por seccion (para la app).
 ETIQUETAS_SECCION = {"comunes": "Columnas comunes", **{p[0]: p[1] for p in PASOS}}
+
+# Que columnas comunes usa realmente cada paso (el resto no le sirve de nada).
+COMUNES_POR_PASO = {
+    "posicion_relativa": ["reg_ini_campo", "reg_fin_campo"],
+    "profundidad": ["reg_ini_campo", "reg_fin_campo", "id_reg_campo"],
+    "acceso": ["reg_ini_campo", "reg_fin_campo", "id_reg_campo"],
+}
+
+
+def campos_config(key):
+    """Campos configurables de un paso: los comunes que usa mas los propios.
+
+    Es la fuente de verdad que consumen la app y los scripts, para que agregar un
+    parametro al core lo publique en las dos puntas sin tocarlas.
+    """
+    usa = set(COMUNES_POR_PASO.get(key, []))
+    comunes = [c for c in CONFIG_CAMPOS.get("comunes", []) if c[0] in usa]
+    return [*comunes, *CONFIG_CAMPOS.get(key, [])]
 
 
 def _base_resultados(colectores_gdf, clave):
@@ -240,12 +303,41 @@ def resolver_clave(colectores_gdf, clave=None):
     return _col(colectores_gdf, "ELEMRED", "ID", "id")
 
 
+def _reenganchar(resultados, base, clave):
+    """Trae al acumulador las columnas ya calculadas de una corrida anterior.
+
+    Sin esto, correr 'criticidad' o 'riesgo' de a uno no encuentra los CF_* que
+    necesita y devuelve todo vacio.
+    """
+    if base is None or clave is None or clave not in base.columns:
+        return resultados
+    geom_base = base.geometry.name if hasattr(base, "geometry") else None
+    previas = [c for c in base.columns if c not in (clave, geom_base)]
+    if not previas:
+        return resultados
+
+    aporte = base[[clave, *previas]].copy()
+    aporte["__clave"] = aporte[clave].map(normalizar_clave)
+    aporte = aporte.drop(columns=[clave])
+
+    geom = resultados.geometry.name
+    orden = resultados.index
+    izq = resultados.copy()
+    izq["__clave"] = izq[clave].map(normalizar_clave)
+    unido = izq.merge(aporte, on="__clave", how="left").drop(columns="__clave")
+    unido.index = orden
+    return gpd.GeoDataFrame(unido, geometry=geom, crs=resultados.crs)
+
+
 def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
-           solo=None, log=None):
+           solo=None, log=None, base=None):
     """Corre el flujo (o solo los pasos en `solo`) y devuelve el GeoDataFrame de
     resultados. `log(mensaje, nivel)` opcional para reportar progreso.
 
     solo: lista de keys de PASOS a ejecutar; None = todos.
+    base: resultados de una corrida anterior (la capa DatosConsecuenciaDeFalla).
+          Sus columnas se reenganchan antes de empezar, para que un paso suelto
+          como 'criticidad' vea los CF_* que ya estaban calculados.
     """
     def _log(msg, nivel="info"):
         if log:
@@ -253,7 +345,7 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
 
     clave = resolver_clave(colectores_gdf, clave)
     ctx = Contexto(colectores_gdf, registros, aux, config)
-    ctx.resultados = _base_resultados(colectores_gdf, clave)
+    ctx.resultados = _reenganchar(_base_resultados(colectores_gdf, clave), base, clave)
 
     keys = solo if solo is not None else [p[0] for p in PASOS]
     for key in keys:

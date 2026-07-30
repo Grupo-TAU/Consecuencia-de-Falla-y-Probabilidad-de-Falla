@@ -1,6 +1,9 @@
 # Salidas regenerables de la app (capas DatosConsecuenciaDeFalla)
 AnalisisDeDatos/salidas/
 
+# Empaquetado del plugin (scripts/deploy_plugin.py: copia de plugin + core)
+dist/
+
 # Python
 __pycache__/
 *.pyc

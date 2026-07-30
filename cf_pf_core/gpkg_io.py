@@ -12,6 +12,8 @@ import sqlite3
 
 import geopandas as gpd
 
+from cf_pf_core.claves import normalizar as normalizar_clave
+
 LAYER_SALIDA_DEFAULT = "DatosConsecuenciaDeFalla"
 CLAVE_DEFAULT = "ELEMRED"
 
@@ -62,44 +64,61 @@ def capa_existe(gpkg_path, layer):
     return layer in listar_capas(gpkg_path)
 
 
-def escribir_resultado(
-    colectores_gdf,
-    serie_resultado,
-    nombre_campo,
+def escribir_resultados(
+    res_gdf,
     out_gpkg,
     out_layer=LAYER_SALIDA_DEFAULT,
-    clave=CLAVE_DEFAULT,
+    clave=None,
+    reemplazar=False,
 ):
-    """Acumula una columna de resultado en la capa de salida.
+    """Escribe el GeoDataFrame de resultados en la capa de salida.
 
-    - colectores_gdf: GeoDataFrame fuente (aporta clave + geometria). No se modifica.
-    - serie_resultado: Serie alineada al indice de colectores_gdf con el valor calculado.
-    - nombre_campo: nombre de la columna de resultado en la capa de salida.
-    - out_gpkg / out_layer: destino. Si la capa ya existe, se actualiza la columna
-      (merge por clave); si no, se crea con clave + geometria + la columna.
+    Si la capa todavia no existe se crea tal cual. Si existe, las columnas de
+    `res_gdf` se mergean por `clave` sobre lo que ya habia: asi se puede correr un
+    calculo individual sin perder los anteriores. Las columnas que ya estaban se
+    reemplazan por la version nueva.
+
+    reemplazar=True escribe la capa de cero. Es lo que corresponde despues de un
+    flujo completo: si quedaran columnas de una corrida anterior, serian de una
+    configuracion vieja mezclada con la nueva.
+
+    Nunca toca la capa fuente de Colectores.
 
     Devuelve el GeoDataFrame de salida resultante.
     """
-    if clave not in colectores_gdf.columns:
-        raise KeyError(f"La clave '{clave}' no esta en Colectores.")
+    out_gpkg = os.path.abspath(out_gpkg)
+    geom_res = res_gdf.geometry.name
 
-    geom_col = colectores_gdf.geometry.name
-    base = colectores_gdf[[clave, geom_col]].copy()
-    base[nombre_campo] = serie_resultado.values
-
-    if capa_existe(out_gpkg, out_layer):
+    if not reemplazar and capa_existe(out_gpkg, out_layer):
         prev = gpd.read_file(out_gpkg, layer=out_layer)
-        # Quitar la columna si ya existia (para reemplazarla) y volver a unir por clave.
-        if nombre_campo in prev.columns:
-            prev = prev.drop(columns=[nombre_campo])
-        salida = prev.merge(
-            base[[clave, nombre_campo]], on=clave, how="left"
-        )
-        salida = gpd.GeoDataFrame(salida, geometry=prev.geometry.name, crs=prev.crs)
-    else:
-        salida = base
+        clave_uso = clave if clave in prev.columns and clave in res_gdf.columns else None
+        if clave_uso is None:
+            for cand in (CLAVE_DEFAULT, "ID", "id"):
+                if cand in prev.columns and cand in res_gdf.columns:
+                    clave_uso = cand
+                    break
 
-    out_dir = os.path.dirname(os.path.abspath(out_gpkg))
-    os.makedirs(out_dir, exist_ok=True)
+        if clave_uso is None:
+            # Sin clave comun no hay forma de unir sin arriesgar mezclar filas.
+            raise ValueError(
+                f"La capa '{out_layer}' ya existe pero no comparte columna clave con "
+                f"los resultados. Claves en la capa: {list(prev.columns)}."
+            )
+
+        aportadas = [c for c in res_gdf.columns if c not in (clave_uso, geom_res)]
+        aporte = res_gdf[[clave_uso, *aportadas]].copy()
+        aporte["__clave"] = aporte[clave_uso].map(normalizar_clave)
+        aporte = aporte.drop(columns=[clave_uso])
+
+        geom_prev = prev.geometry.name
+        prev = prev.drop(columns=[c for c in aportadas if c in prev.columns])
+        prev["__clave"] = prev[clave_uso].map(normalizar_clave)
+
+        salida = prev.merge(aporte, on="__clave", how="left").drop(columns="__clave")
+        salida = gpd.GeoDataFrame(salida, geometry=geom_prev, crs=prev.crs)
+    else:
+        salida = res_gdf
+
+    os.makedirs(os.path.dirname(out_gpkg), exist_ok=True)
     salida.to_file(out_gpkg, layer=out_layer, driver="GPKG")
     return salida

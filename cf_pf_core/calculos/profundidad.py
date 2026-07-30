@@ -5,7 +5,7 @@ inicial/final.
 Logica portada IDENTICA a scripts/run_cf_profundidad.py:
   - Por cada registro: prof = max(PROFUNDIDAD, Profundidad_Inspeccionada).
   - Por cada colector: prof_max = max(prof_reg_inicial, prof_reg_final).
-  - Clasifica por rango (default 2=1; 3=2; 4=3; 5=4; 7=5); sin dato -> NULL.
+  - Clasifica por rango (default 1.5=1; 2.5=2; 3.5=3; 4.5=4; 6=5); sin dato -> NULL.
 """
 import pandas as pd
 
@@ -15,7 +15,7 @@ CAMPO_REG_FIN_DEFAULT = "Registro_Final"
 CAMPO_ID_REG_DEFAULT = "ID"
 CAMPO_PROF_DEFAULT = "PROFUNDIDAD"
 CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
-RANGO_DEFAULT = "2=1; 3=2; 4=3; 5=4; 7=5"
+RANGO_DEFAULT = "1.5=1; 2.5=2; 3.5=3; 4.5=4; 6=5"
 
 
 def _to_float(v):

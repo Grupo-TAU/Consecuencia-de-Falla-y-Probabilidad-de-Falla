@@ -24,3 +24,5 @@ category=Vector
 icon=
 experimental=False
 deprecated=False
+# Sin esto qgis_process no carga el plugin (y QGIS no sabe que aporta algoritmos).
+hasProcessingProvider=yes

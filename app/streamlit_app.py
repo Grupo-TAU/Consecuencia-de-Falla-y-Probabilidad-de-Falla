@@ -3,8 +3,8 @@ App Streamlit — Consecuencia y Probabilidad de Falla (CdeF).
 
 Tres pestañas:
   1. Preparación de datos  — corre los pasos que ESCRIBEN la capa real
-     (asignar registros, cota zampeado, longitud/pendiente). Usa los scripts
-     standalone existentes.
+     (asignar registros, cota zampeado, cotas/pendiente), vía
+     cf_pf_core.preparacion.
   2. Cálculo de CdeF       — LEE la fuente (nunca la modifica) y escribe los
      resultados en una capa aparte 'DatosConsecuenciaDeFalla'. Flujo completo
      o cálculo individual.
@@ -13,7 +13,6 @@ Tres pestañas:
 Correr con:  streamlit run app/streamlit_app.py
 """
 import os
-import subprocess
 import sys
 
 import geopandas as gpd
@@ -24,7 +23,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RAIZ not in sys.path:
     sys.path.insert(0, RAIZ)
 
-from cf_pf_core import flujo, gpkg_io, proyecto, visualizador  # noqa: E402
+from cf_pf_core import flujo, gpkg_io, preparacion, proyecto, visualizador  # noqa: E402
 from cf_pf_core.calculos import criticidad as _crit  # noqa: E402
 
 st.set_page_config(page_title="Consecuencia de Falla", layout="wide")
@@ -88,27 +87,62 @@ with tab_prep:
     st.subheader("Preparación de datos")
     st.warning("⚠️ Estos pasos **escriben la capa real** (Colectores/Registros). "
                "No generan una capa aparte. Asegurate de tener respaldo.")
+    st.caption("Corré los pasos en orden. Ninguno pisa datos ya cargados: sólo "
+               "completa lo que está vacío, así que se pueden repetir sin riesgo.")
+
     if not col_path:
         st.info("Indicá la capa de Colectores en la barra lateral.")
     else:
-        pasos_prep = [
-            ("Asignar Registro Inicial y Final", "run_asignar_registros_colectores.py",
-             ["--gpkg-col", col_path, "--gpkg-reg", reg_path]),
-            ("Actualizar Cota Zampeado (Registros)", "run_actualizar_registros_cota_zampeado.py",
-             ["--gpkg-reg", reg_path, "--gpkg-col", col_path]),
-            ("Actualizar Longitud / Pendiente (Colectores)", "run_actualizar_colectores_long_zamp_pend.py",
-             ["--gpkg-col", col_path, "--gpkg-reg", reg_path]),
-        ]
-        for label, script, args in pasos_prep:
+        st.markdown("### Configuración")
+        st.caption("Cada campo viene con su nombre por defecto — editalo si en tu capa "
+                   "se llama distinto.")
+        config_prep = {}
+
+        with st.expander("Columnas comunes", expanded=False):
+            for clave_cfg, etiqueta, default in preparacion.CAMPOS_COMUNES:
+                config_prep[clave_cfg] = st.text_input(
+                    etiqueta, value=default, key=f"prep_cfg_{clave_cfg}")
+
+        for key_paso, campos in preparacion.CONFIG_CAMPOS.items():
+            with st.expander(preparacion.ETIQUETAS_PASO[key_paso], expanded=False):
+                for clave_cfg, etiqueta, default in campos:
+                    if isinstance(default, (int, float)) and not isinstance(default, bool):
+                        config_prep[clave_cfg] = st.number_input(
+                            etiqueta, value=float(default), step=0.1,
+                            key=f"prep_cfg_{clave_cfg}")
+                    else:
+                        config_prep[clave_cfg] = st.text_input(
+                            etiqueta, value=default, key=f"prep_cfg_{clave_cfg}")
+
+        st.markdown("### Pasos")
+        for key_paso, label, _fn, _campos in preparacion.PASOS:
             c1, c2 = st.columns([3, 1])
             c1.write(f"**{label}**")
-            if c2.button("Correr", key=f"prep_{script}"):
-                with st.spinner(f"Ejecutando {label}…"):
-                    r = subprocess.run([sys.executable, os.path.join(RAIZ, "scripts", script), *args],
-                                       capture_output=True, text=True)
-                (st.success if r.returncode == 0 else st.error)(
-                    f"{label} — rc={r.returncode}")
-                st.code((r.stdout or "") + (("\n" + r.stderr) if r.stderr else ""))
+            if not c2.button("Correr", key=f"prep_{key_paso}"):
+                continue
+
+            mensajes = []
+            with st.spinner(f"Ejecutando {label}…"):
+                try:
+                    preparacion.correr(
+                        key_paso, gpkg_col=col_path, gpkg_reg=reg_path or None,
+                        config=config_prep,
+                        log=lambda m, n="info": mensajes.append((n, m)))
+                    ok = True
+                except preparacion.PreparacionError as e:
+                    mensajes.append(("error", str(e)))
+                    ok = False
+                except Exception as e:  # noqa: BLE001
+                    mensajes.append(("error", f"{type(e).__name__}: {e}"))
+                    ok = False
+
+            if ok:
+                # El paso modifico la capa fuente: invalidar lo cacheado.
+                _cargar.clear()
+            (st.success if ok else st.error)(
+                f"{label} — {'listo' if ok else 'no se pudo completar'}")
+            for nivel, msg in mensajes:
+                {"error": st.error, "warn": st.warning}.get(nivel, st.write)(msg)
 
 # ── Pestaña 2: Cálculo de CdeF (lee fuente, escribe capa aparte) ─────────────
 with tab_calc:
@@ -131,7 +165,11 @@ with tab_calc:
             titulo = flujo.ETIQUETAS_SECCION.get(sec_key, sec_key)
             with st.expander(f"⚙️ {titulo}"):
                 for ckey, label, default in campos:
-                    config[ckey] = st.text_input(label, value=default, key=f"cfg_{ckey}")
+                    if isinstance(default, (int, float)) and not isinstance(default, bool):
+                        config[ckey] = st.number_input(label, value=float(default), step=0.5,
+                                                       key=f"cfg_{ckey}")
+                    else:
+                        config[ckey] = st.text_input(label, value=default, key=f"cfg_{ckey}")
 
         # Criticidad: pesos y parámetros por grupo, totalmente configurables.
         with st.expander("⚖️ Criticidad — pesos y parámetros"):
@@ -165,7 +203,7 @@ with tab_calc:
             with st.spinner("Corriendo flujo…"):
                 res = flujo.correr(colectores, registros=registros, aux=aux,
                                    config=config, clave=clave, log=_log)
-                res.to_file(out_path, layer=gpkg_io.LAYER_SALIDA_DEFAULT, driver="GPKG")
+                gpkg_io.escribir_resultados(res, out_path, clave=clave, reemplazar=True)
             for nivel, msg in registro_log:
                 {"ok": st.success, "warn": st.warning, "error": st.error}.get(nivel, st.write)(msg)
             st.session_state["salida_path"] = out_path
@@ -179,15 +217,7 @@ with tab_calc:
                 res = flujo.correr(colectores, registros=registros, aux=aux, config=config,
                                    clave=clave, solo=[key],
                                    log=lambda m, n: registro_log.append((n, m)))
-                # merge en salida existente si hay
-                if os.path.isfile(out_path) and gpkg_io.capa_existe(out_path, gpkg_io.LAYER_SALIDA_DEFAULT):
-                    prev = gpd.read_file(out_path, layer=gpkg_io.LAYER_SALIDA_DEFAULT)
-                    nuevas = [c for c in res.columns if c not in prev.columns]
-                    for c in nuevas:
-                        prev[c] = res[c].values
-                    prev.to_file(out_path, layer=gpkg_io.LAYER_SALIDA_DEFAULT, driver="GPKG")
-                else:
-                    res.to_file(out_path, layer=gpkg_io.LAYER_SALIDA_DEFAULT, driver="GPKG")
+                gpkg_io.escribir_resultados(res, out_path, clave=clave)
                 for nivel, msg in registro_log:
                     {"ok": st.success, "warn": st.warning, "error": st.error}.get(nivel, st.write)(msg)
                 st.session_state["salida_path"] = out_path

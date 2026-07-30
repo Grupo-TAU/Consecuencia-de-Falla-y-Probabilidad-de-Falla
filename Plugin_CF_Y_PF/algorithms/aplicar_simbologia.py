@@ -12,6 +12,12 @@ from qgis.core import (
 )
 from qgis.PyQt.QtGui import QColor, QFont
 
+# Importar core_bridge deja cf_pf_core importable (resuelve el core vendorizado).
+from .. import core_bridge  # noqa: F401
+
+from cf_pf_core import gpkg_io
+from cf_pf_core.calculos import criticidad
+
 # Prefijo que identifica las reglas gestionadas por este algoritmo.
 # Las reglas del usuario que NO tengan este prefijo nunca se tocan.
 _PREFIJO = "[AUTO] "
@@ -26,7 +32,7 @@ RANGOS = [
     ('"Criticidad" >  5 AND "Criticidad" <= 6', QColor("#D62728"), "<= 6 - Rojo"),
 ]
 
-COLECTORES = "COLECTORES"
+RESULTADOS = "RESULTADOS"
 CAMPO      = "CAMPO"
 OUTPUT_OK  = "SIMBOLOGIA_OK"
 
@@ -39,7 +45,7 @@ def _construir_expresion(campo, expr_base):
 
 class AplicarSimbologia(QgsProcessingAlgorithm):
     """
-    Aplica simbologia basada en reglas (1-6) a la capa Colectores.
+    Aplica simbologia basada en reglas (1-6) a la capa de resultados.
     Las reglas automaticas se actualizan en cada ejecucion;
     las reglas agregadas manualmente por el usuario se preservan.
     """
@@ -51,22 +57,25 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
         return "Aplicar Simbologia (1-6)"
 
     def group(self):
-        return "Personalizados"
+        return "Consecuencia de Falla"
 
     def groupId(self):
-        return "personalizados"
+        return "consecuencia_de_falla"
 
     def shortHelpString(self):
         return (
-            "Aplica a la capa Colectores una simbologia basada en los resultados de la Criticidad del Tramo.\n\n"
-            "Las reglas que el usuario agregue manualmente en QGIS \n\n"
-            "Rangos \n\n"
-            "<=1=Verde \n\n"
-            "<=2=Verde claro \n\n"
-            "<=3=Amarillo \n\n" 
-            "<=4=Naranjo claro \n\n"
-            "<=5=Naranjo\n\n"
-            "<=6=Rojo"
+            f"Aplica simbologia por Criticidad del tramo a la capa de resultados "
+            f"(<strong>{gpkg_io.LAYER_SALIDA_DEFAULT}</strong>), la que generan los "
+            "algoritmos de calculo.\n\n"
+            "Las reglas que agregues manualmente en QGIS se conservan: solo se "
+            "regeneran las que llevan el prefijo [AUTO].\n\n"
+            "Rangos:\n\n"
+            "<=1 = Verde\n\n"
+            "<=2 = Verde claro\n\n"
+            "<=3 = Amarillo\n\n"
+            "<=4 = Naranjo claro\n\n"
+            "<=5 = Naranjo\n\n"
+            "<=6 = Rojo"
         )
 
     def createInstance(self):
@@ -74,13 +83,16 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
 
     def initAlgorithm(self, config=None):
         self.addParameter(
-            QgsProcessingParameterVectorLayer(COLECTORES, "Capa Colectores")
+            QgsProcessingParameterVectorLayer(
+                RESULTADOS,
+                f"Capa de resultados ({gpkg_io.LAYER_SALIDA_DEFAULT})",
+            )
         )
         self.addParameter(
             QgsProcessingParameterString(
                 CAMPO,
-                "Nombre de Campo de salida (Clasificacion Criticidad)",
-                defaultValue="criticidad",
+                "Campo a simbolizar",
+                defaultValue=criticidad.CAMPO_SALIDA_DEFAULT,
             )
         )
         self.addOutput(
@@ -88,16 +100,21 @@ class AplicarSimbologia(QgsProcessingAlgorithm):
         )
 
     def processAlgorithm(self, parameters, context, feedback):
-        capa = self.parameterAsVectorLayer(parameters, COLECTORES, context)
+        capa = self.parameterAsVectorLayer(parameters, RESULTADOS, context)
         if capa is None:
-            raise QgsProcessingException("No se pudo leer la capa Colectores.")
+            raise QgsProcessingException("No se pudo leer la capa de resultados.")
 
         campo = self.parameterAsString(parameters, CAMPO, context)
         if not campo:
             raise QgsProcessingException("Debe especificar el campo de clasificacion.")
         if capa.fields().lookupField(campo) == -1:
+            disponibles = ", ".join(f.name() for f in capa.fields())
             raise QgsProcessingException(
-                f"El campo '{campo}' no existe en la capa Colectores."
+                f"El campo '{campo}' no existe en '{capa.name()}'. "
+                f"Campos disponibles: {disponibles}.\n"
+                f"Recorda que los resultados se calculan en la capa "
+                f"{gpkg_io.LAYER_SALIDA_DEFAULT}, no en Colectores: corre primero el "
+                "algoritmo de Criticidad (o el Flujo Completo)."
             )
 
         ancho = "1.4"

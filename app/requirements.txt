@@ -1,5 +1,12 @@
-# Dependencias de la app Streamlit y del core cf_pf_core.
+# Dependencias de la app (app/streamlit_app.py) y del core (cf_pf_core).
 # Instalar con:  pip install -r app/requirements.txt
-geopandas>=1.1
+#
+# Requiere Python 3.10+ (probado en 3.14). geopandas trae shapely, pyproj y
+# pyogrio (motor de lectura/escritura de GeoPackage).
+
 streamlit>=1.60
-matplotlib>=3.10
+geopandas>=1.1
+shapely>=2.0
+pyogrio>=0.9
+matplotlib>=3.8
+bokeh>=3.5
