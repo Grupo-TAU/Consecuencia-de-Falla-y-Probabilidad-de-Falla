@@ -17,11 +17,11 @@ from bokeh.models import (
     ColumnDataSource,
     CustomJS,
     Div,
+    FixedTicker,
     HoverTool,
     LinearColorMapper,
     Slider,
 )
-from bokeh.palettes import RdYlGn
 from bokeh.plotting import figure
 from bokeh.resources import CDN
 
@@ -101,9 +101,11 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
 
     source = ColumnDataSource(data={"xs": xs, "ys": ys, "criticidad": crit_ini, **datos_param})
 
-    # Mapa de color: criticidad baja = verde, alta = rojo.
-    paleta = list(reversed(RdYlGn[11]))
-    mapper = LinearColorMapper(palette=paleta, low=1.0, high=6.0)
+    # Mismas 6 clases que el renderer de QGIS (criticidad.CLASES_COLOR): verde
+    # abajo, rojo arriba. low=0/high=6 con 6 colores parte en tramos de 1, o sea
+    # los mismos cortes que las reglas '"Criticidad" > N AND <= N+1' del plugin.
+    paleta = [color for _, color, _ in _crit.CLASES_COLOR]
+    mapper = LinearColorMapper(palette=paleta, low=0.0, high=6.0)
 
     p = figure(
         title=titulo, x_axis_type="mercator", y_axis_type="mercator",
@@ -117,7 +119,16 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
         line_width=3, line_alpha=0.9,
     )
     p.add_tools(HoverTool(renderers=[lineas], tooltips=[("Criticidad", "@criticidad{0.00}")]))
-    p.add_layout(ColorBar(color_mapper=mapper, title="Criticidad"), "right")
+    # Marcas en los cortes de clase (0..6), para que la barra se lea como la
+    # leyenda de QGIS y no como un degradado continuo.
+    p.add_layout(
+        ColorBar(
+            color_mapper=mapper,
+            title="Criticidad",
+            ticker=FixedTicker(ticks=[b for b, _, _ in _crit.CLASES_COLOR] + [0]),
+        ),
+        "right",
+    )
 
     # Sliders de peso por grupo + metadata para el recalculo JS.
     sliders = []

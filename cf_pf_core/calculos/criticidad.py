@@ -43,6 +43,20 @@ ALIASES = {
     "CF_Acceso_Mantenimiento": ["CF_Acceso_Mantenimiento", "CF_AccesoMantenimiento"],
 }
 
+# Simbologia de la criticidad: 6 clases, (limite_superior, color, etiqueta).
+# Vive aca —y no en el visualizador— para que la comparta con el renderer de
+# QGIS (Plugin_CF_Y_PF/algorithms/aplicar_simbologia.py) y no se dupliquen los
+# colores. Este modulo no importa nada pesado a proposito, asi que el plugin lo
+# puede leer sin arrastrar bokeh.
+CLASES_COLOR = [
+    (1, "#2CA02C", "<= 1 - Verde"),
+    (2, "#98DF8A", "<= 2 - Verde claro"),
+    (3, "#FFFF00", "<= 3 - Amarillo"),
+    (4, "#FFBB78", "<= 4 - Naranjo claro"),
+    (5, "#FF7F0E", "<= 5 - Naranjo"),
+    (6, "#D62728", "<= 6 - Rojo"),
+]
+
 # Todos los parametros posibles (para que la app arme la lista de opciones).
 PARAMS_DISPONIBLES = [
     "CF_Diametro", "CF_Profundidad", "CF_Acceso_Mantenimiento", "CF_Ubicacion",
