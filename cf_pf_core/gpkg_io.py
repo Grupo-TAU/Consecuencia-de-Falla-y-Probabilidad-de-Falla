@@ -64,6 +64,36 @@ def capa_existe(gpkg_path, layer):
     return layer in listar_capas(gpkg_path)
 
 
+def diagnosticar_claves(gdf, clave):
+    """Revisa la clave de join de una capa. Devuelve None si esta sana, o un
+    mensaje explicando el problema.
+
+    Detecta los dos casos que rompen los merges rio abajo:
+      - claves repetidas: la capa se escribio dos veces, o la fuente trae tramos
+        duplicados. Multiplica filas en cada union.
+      - claves vacias/nulas: todas colapsan en la misma clave al normalizar, asi
+        que se cruzan entre si (n filas sin clave -> n*n).
+    """
+    if gdf is None or clave not in getattr(gdf, "columns", []):
+        return None
+    norm = gdf[clave].map(normalizar_clave)
+    vacias = int((norm == "").sum())
+    repes = int(norm[norm != ""].duplicated().sum())
+    if not repes and vacias <= 1:
+        return None
+    partes = []
+    if repes:
+        partes.append(
+            f"{repes} valores repetidos en '{clave}' ({len(gdf)} filas, "
+            f"{norm[norm != ''].nunique()} claves distintas)"
+        )
+    if vacias > 1:
+        partes.append(f"{vacias} filas sin '{clave}' (se unen todas entre si)")
+    return ("La capa tiene " + " y ".join(partes)
+            + ". Los cálculos individuales van a multiplicar filas: "
+              "corré el flujo completo, que reescribe la capa de cero.")
+
+
 def escribir_resultados(
     res_gdf,
     out_gpkg,

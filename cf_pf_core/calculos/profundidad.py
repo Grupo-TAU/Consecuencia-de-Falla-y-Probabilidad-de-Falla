@@ -86,11 +86,20 @@ def calcular(
     c_fin = _col(colectores_gdf, campo_reg_fin)
     c_id = _col(registros_gdf, campo_id_reg, "ID", "Id")
     c_prof = _col(registros_gdf, campo_prof)
+    c_prof_i = _col(registros_gdf, campo_prof_inspec)
     for nombre, val in [("Registro_Inicial", c_ini), ("Registro_Final", c_fin),
-                        ("ID registros", c_id), ("PROFUNDIDAD", c_prof)]:
+                        ("ID registros", c_id)]:
         if not val:
             raise KeyError(f"Campo '{nombre}' no encontrado.")
-    c_prof_i = _col(registros_gdf, campo_prof_inspec)
+    # Alcanza con UNA de las dos columnas de profundidad: el calculo de mas abajo
+    # ya toma el maximo de las que haya. Exigir las dos frenaba capas donde la
+    # profundidad la dedujo la preparacion (que escribe solo Profundidad_Inspeccionada).
+    if not c_prof and not c_prof_i:
+        raise KeyError(
+            f"No hay columna de profundidad en Registros: se busco '{campo_prof}' y "
+            f"'{campo_prof_inspec}'. Corré el paso de preparación "
+            "'Actualizar Cota Zampeado', que la deduce de la cota de tapa y ZARRIBA."
+        )
     limites = parse_rango(rango)
 
     mapa_prof = {}
@@ -98,7 +107,7 @@ def calcular(
         rid = _norm_id(row[c_id])
         if not rid:
             continue
-        prof = _to_float(row[c_prof])
+        prof = _to_float(row[c_prof]) if c_prof else None
         if c_prof_i:
             prof_i = _to_float(row[c_prof_i])
             if prof_i is not None:

@@ -240,15 +240,21 @@ with tab_calc:
 
         st.markdown("**Flujo completo**")
         if st.button("▶ Correr todo el flujo", type="primary"):
-            registro_log = []
-            def _log(msg, nivel):
-                registro_log.append((nivel, msg))
-            with st.spinner("Corriendo flujo…"):
+            barra = st.progress(0.0, text="Preparando…")
+            with st.status("Corriendo flujo…", expanded=True) as estado:
+                def _log(msg, nivel):
+                    {"ok": st.success, "warn": st.warning,
+                     "error": st.error}.get(nivel, st.write)(msg)
+
+                def _prog(fraccion, etiqueta):
+                    barra.progress(fraccion, text=f"{fraccion:.0%} · {etiqueta}")
+
                 res = flujo.correr(colectores, registros=registros, aux=aux,
-                                   config=config, clave=clave, log=_log)
+                                   config=config, clave=clave, log=_log, progreso=_prog)
+                st.write(f"Escribiendo {len(res)} filas en {out_path}…")
                 gpkg_io.escribir_resultados(res, out_path, clave=clave, reemplazar=True)
-            for nivel, msg in registro_log:
-                {"ok": st.success, "warn": st.warning, "error": st.error}.get(nivel, st.write)(msg)
+                estado.update(label="Flujo completo ✓", state="complete")
+            barra.progress(1.0, text="100% · Listo")
             st.session_state["salida_path"] = out_path
             st.success(f"Listo → {out_path}")
 
@@ -260,18 +266,28 @@ with tab_calc:
         cols_btn = st.columns(3)
         for i, (key, label, requiere, _fn) in enumerate(flujo.PASOS):
             if cols_btn[i % 3].button(label, key=f"calc_{key}"):
-                registro_log = []
-                # Lo que dejaron las corridas anteriores: sin esto, un paso que
-                # combina CF (criticidad, riesgo) no encontraria nada.
-                base = None
-                if gpkg_io.capa_existe(out_path, gpkg_io.LAYER_SALIDA_DEFAULT):
-                    base = gpkg_io.leer_capa(out_path, gpkg_io.LAYER_SALIDA_DEFAULT)
-                res = flujo.correr(colectores, registros=registros, aux=aux, config=config,
-                                   clave=clave, solo=[key], base=base,
-                                   log=lambda m, n: registro_log.append((n, m)))
-                gpkg_io.escribir_resultados(res, out_path, clave=clave)
-                for nivel, msg in registro_log:
-                    {"ok": st.success, "warn": st.warning, "error": st.error}.get(nivel, st.write)(msg)
+                with st.status(f"{label}…", expanded=True) as estado:
+                    def _log(msg, nivel):
+                        {"ok": st.success, "warn": st.warning,
+                         "error": st.error}.get(nivel, st.write)(msg)
+                    # Lo que dejaron las corridas anteriores: sin esto, un paso que
+                    # combina CF (criticidad, riesgo) no encontraria nada.
+                    base = None
+                    if gpkg_io.capa_existe(out_path, gpkg_io.LAYER_SALIDA_DEFAULT):
+                        st.write("Leyendo resultados previos…")
+                        base = gpkg_io.leer_capa(out_path, gpkg_io.LAYER_SALIDA_DEFAULT)
+                        # Una capa con claves repetidas multiplica filas en cada
+                        # cálculo individual; se avisa acá, que es donde se detecta.
+                        aviso = gpkg_io.diagnosticar_claves(base, clave)
+                        if aviso:
+                            st.error(aviso)
+                    st.write("Calculando…")
+                    res = flujo.correr(colectores, registros=registros, aux=aux,
+                                       config=config, clave=clave, solo=[key],
+                                       base=base, log=_log)
+                    st.write(f"Escribiendo {len(res)} filas…")
+                    gpkg_io.escribir_resultados(res, out_path, clave=clave)
+                    estado.update(label=f"{label} ✓", state="complete")
                 st.session_state["salida_path"] = out_path
 
 # ── Pestaña 3: Visualización ─────────────────────────────────────────────────
@@ -284,7 +300,10 @@ with tab_vis:
         if gv is not None:
             campos = [c for c in gv.columns if c != gv.geometry.name
                       and str(gv[c].dtype) != "object"]
-            pref = next((c for c in ("Riesgo", "criticidad", "CF_Diametro") if c in campos), campos[0] if campos else None)
+            # "CF" es el mismo numero que "criticidad" con otro nombre (ver
+            # flujo.campo_criticidad), asi que tambien sirve como preferido.
+            pref = next((c for c in ("Riesgo", "criticidad", "CF", "CF_Diametro") if c in campos),
+                        campos[0] if campos else None)
             campo = st.selectbox("Colorear por", campos,
                                  index=campos.index(pref) if pref in campos else 0)
             c1, c2 = st.columns([2, 1])
@@ -307,7 +326,14 @@ with tab_vis:
                 html_path = os.path.splitext(vis_path)[0] + "_visualizador.html"
                 try:
                     grupos = st.session_state.get("config", {}).get("criticidad_grupos") or None
-                    visualizador.generar_html(gv, html_path, grupos=grupos,
+                    # La capa de salida solo trae los resultados; los valores
+                    # crudos que el tooltip muestra entre paréntesis (DIAMETRO,
+                    # PROFUNDIDAD, TIPO…) viven en Colectores.
+                    gv_tt = visualizador.adjuntar_crudos(gv, colectores, clave)
+                    nuevas = [c for c in gv_tt.columns if c not in gv.columns]
+                    if nuevas:
+                        st.caption("Datos de Colectores en el tooltip: " + ", ".join(nuevas))
+                    visualizador.generar_html(gv_tt, html_path, grupos=grupos,
                                               titulo="Consecuencia de Falla")
                     st.success(f"Generado: {html_path}")
                     with open(html_path, "rb") as fh:

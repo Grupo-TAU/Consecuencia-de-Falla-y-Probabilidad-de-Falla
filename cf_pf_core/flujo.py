@@ -127,15 +127,21 @@ def paso_ubicacion(ctx):
 
 
 def paso_prox_sitios(ctx):
-    return {"CF_Prox_SitiosInteres": proximidad.calcular(
+    # Ademas de la clase se guarda la distancia al sitio mas cercano: es el
+    # numero que la origino y el visualizador lo muestra entre parentesis.
+    clase, dist = proximidad.calcular_detalle(
         ctx.colectores, ctx.aux["sitios"],
-        ctx.cfg("sitios_rango", proximidad.RANGOS_SITIOS_DEFAULT))}
+        ctx.cfg("sitios_rango", proximidad.RANGOS_SITIOS_DEFAULT))
+    return {"CF_Prox_SitiosInteres": clase,
+            proximidad.CAMPO_DIST_SITIOS_DEFAULT: dist}
 
 
 def paso_prox_medioamb(ctx):
-    return {"CF_Prox_MedioAmbiental": proximidad.calcular(
+    clase, dist = proximidad.calcular_detalle(
         ctx.colectores, ctx.aux["cursos"],
-        ctx.cfg("cursos_rango", proximidad.RANGOS_MEDIOAMBIENTAL_DEFAULT))}
+        ctx.cfg("cursos_rango", proximidad.RANGOS_MEDIOAMBIENTAL_DEFAULT))
+    return {"CF_Prox_MedioAmbiental": clase,
+            proximidad.CAMPO_DIST_MEDIOAMBIENTAL_DEFAULT: dist}
 
 
 def paso_acceso(ctx):
@@ -162,14 +168,29 @@ def paso_pf(ctx):
                                               campo_pacp=ctx.cfg("pf_campo_pacp", None))}
 
 
+def campo_criticidad(config=None):
+    """Nombre de la columna donde se escribe la criticidad.
+
+    Configurable porque no todos los consumidores la llaman igual: la simbologia
+    de QGIS y los .gpkg de trabajo usan 'criticidad', mientras que el
+    visualizador interactivo de las entregas la lee como 'CF'. Es el mismo
+    numero; cambia solo el nombre de la columna.
+    """
+    v = (config or {}).get("criticidad_campo")
+    return str(v).strip() if v and str(v).strip() else criticidad.CAMPO_SALIDA_DEFAULT
+
+
 def paso_criticidad(ctx):
     # Lee los CF ya acumulados en resultados. grupos configurable (pesos + params).
-    return {"criticidad": criticidad.calcular(
+    return {campo_criticidad(ctx.config): criticidad.calcular(
         ctx.resultados, grupos=ctx.cfg("criticidad_grupos", None))}
 
 
 def paso_riesgo(ctx):
-    return {"Riesgo": riesgo.calcular(ctx.resultados)}
+    # Riesgo = criticidad x PF: tiene que buscar la criticidad con el mismo
+    # nombre con el que la escribio paso_criticidad.
+    return {"Riesgo": riesgo.calcular(
+        ctx.resultados, campo_criticidad=campo_criticidad(ctx.config))}
 
 
 # (key, label, requiere, fn)
@@ -197,8 +218,9 @@ COLUMNAS_POR_PASO = {
     "diametro": ["CF_Diametro"],
     "posicion_relativa": ["posicionRelativa", "CF_PosicionRelativa"],
     "profundidad": ["CF_Profundidad"],
-    "prox_sitios": ["CF_Prox_SitiosInteres"],
-    "prox_medioamb": ["CF_Prox_MedioAmbiental"],
+    "prox_sitios": ["CF_Prox_SitiosInteres", proximidad.CAMPO_DIST_SITIOS_DEFAULT],
+    "prox_medioamb": ["CF_Prox_MedioAmbiental",
+                      proximidad.CAMPO_DIST_MEDIOAMBIENTAL_DEFAULT],
     "antiguedad": ["CF_Antiguedad"],
     "material": ["CF_Material"],
     "acceso": ["CF_Acceso_Mantenimiento"],
@@ -285,6 +307,9 @@ CONFIG_CAMPOS = {
     "pf": [
         ("pf_campo_pacp", "Columna PACP (vacío = autodetecta)", ""),
     ],
+    "criticidad": [
+        ("criticidad_campo", "Columna de salida", criticidad.CAMPO_SALIDA_DEFAULT),
+    ],
 }
 
 # Etiquetas legibles por seccion (para la app).
@@ -309,30 +334,44 @@ def campos_config(key):
     return [*comunes, *CONFIG_CAMPOS.get(key, [])]
 
 
-def _nombres_conocidos():
+def columnas_de_paso(key, config=None):
+    """Columnas que produce un paso, ya resueltos los nombres configurables.
+
+    COLUMNAS_POR_PASO tiene los nombres por defecto; este es el que hay que usar
+    cuando esta en juego la config, porque la criticidad se puede renombrar.
+    """
+    if key == "criticidad":
+        return [campo_criticidad(config)]
+    return COLUMNAS_POR_PASO.get(key, [])
+
+
+def _nombres_conocidos(config=None):
     """Nombres de columna de resultado, en minusculas, incluidos los alias viejos."""
     conocidos = {c.lower() for c in COLUMNAS_SALIDA}
     for alias in criticidad.ALIASES.values():
         conocidos.update(a.lower() for a in alias)
+    # El nombre configurado de la criticidad tambien cuenta como resultado: si no,
+    # una capa que ya trae 'CF' no se reconoceria como corrida anterior.
+    conocidos.add(campo_criticidad(config).lower())
     return conocidos
 
 
-def previas_de_fuente(colectores_gdf):
+def previas_de_fuente(colectores_gdf, config=None):
     """Columnas de resultado que la capa de Colectores ya trae calculadas.
 
     Muchas capas de trabajo ya tienen los CF_* cargados de corridas anteriores
     (hechas con el plugin viejo, o a mano). Reaprovecharlas permite recalcular un
     solo paso —tipico: Criticidad— sin tener que rehacer todos los CF antes.
     """
-    conocidos = _nombres_conocidos()
+    conocidos = _nombres_conocidos(config)
     return [c for c in colectores_gdf.columns if c.lower() in conocidos]
 
 
-def _base_resultados(colectores_gdf, clave):
+def _base_resultados(colectores_gdf, clave, config=None):
     """Acumulador inicial: clave + geometria + lo que la fuente ya traiga calculado."""
     geom = colectores_gdf.geometry.name
     cols = [c for c in (clave, geom) if c is not None]
-    cols += [c for c in previas_de_fuente(colectores_gdf) if c not in cols]
+    cols += [c for c in previas_de_fuente(colectores_gdf, config) if c not in cols]
     return colectores_gdf[cols].copy()
 
 
@@ -360,6 +399,18 @@ def _reenganchar(resultados, base, clave):
     aporte["__clave"] = aporte[clave].map(normalizar_clave)
     aporte = aporte.drop(columns=[clave])
 
+    # Un merge left solo conserva las filas si la clave es unica del lado derecho.
+    # Sin este control el merge multiplica las filas y despues falla al reponer el
+    # indice, con un ValueError de pandas que no dice nada del problema real.
+    repes = int(aporte["__clave"].duplicated().sum())
+    if repes:
+        raise ValueError(
+            f"La capa de resultados anterior tiene {repes} valores repetidos en "
+            f"'{clave}' ({len(aporte)} filas, {aporte['__clave'].nunique()} claves "
+            "distintas). Suele significar que se escribio dos veces. Corré el flujo "
+            "completo, que reescribe la capa de cero."
+        )
+
     geom = resultados.geometry.name
     orden = resultados.index
     izq = resultados.copy()
@@ -376,12 +427,15 @@ def _reenganchar(resultados, base, clave):
 
 
 def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
-           solo=None, log=None, base=None):
+           solo=None, log=None, base=None, progreso=None):
     """Corre el flujo (o solo los pasos en `solo`) y devuelve el GeoDataFrame de
     resultados. `log(mensaje, nivel)` opcional para reportar progreso.
 
     solo: lista de keys de PASOS a ejecutar; None = todos.
     base: resultados de una corrida anterior (la capa DatosConsecuenciaDeFalla).
+    progreso: callable(fraccion, etiqueta) con fraccion en [0, 1]. Se llama antes
+        de cada paso y una vez al terminar. Sirve para barras de progreso; los
+        pasos salteados igual avanzan, asi la fraccion no se queda trabada.
 
     De donde salen los CF que un paso necesita pero no calcula (el caso de
     'criticidad' y 'riesgo'), de menor a mayor prioridad:
@@ -395,6 +449,10 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
         if log:
             log(msg, nivel)
 
+    def _prog(fraccion, etiqueta):
+        if progreso:
+            progreso(max(0.0, min(1.0, fraccion)), etiqueta)
+
     clave = resolver_clave(colectores_gdf, clave)
     ctx = Contexto(colectores_gdf, registros, aux, config)
 
@@ -402,22 +460,30 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
 
     # Lo que se reaprovecha se avisa: si un paso no se corre y su columna sale de
     # la fuente, el usuario tiene que poder distinguirlo de un valor recien calculado.
-    a_calcular = {c.lower() for k in keys for c in COLUMNAS_POR_PASO.get(k, [])}
-    reusadas = [c for c in previas_de_fuente(colectores_gdf) if c.lower() not in a_calcular]
+    a_calcular = {c.lower() for k in keys for c in columnas_de_paso(k, config)}
+    reusadas = [c for c in previas_de_fuente(colectores_gdf, config)
+                if c.lower() not in a_calcular]
     if reusadas:
         _log("Se reusan columnas ya presentes en Colectores: " + ", ".join(reusadas))
 
-    ctx.resultados = _reenganchar(_base_resultados(colectores_gdf, clave), base, clave)
+    ctx.resultados = _reenganchar(
+        _base_resultados(colectores_gdf, clave, config), base, clave)
 
-    for key in keys:
+    total = max(len(keys), 1)
+    for i, key in enumerate(keys):
         if key not in PASOS_POR_KEY:
             _log(f"Paso desconocido: {key}", "warn")
+            _prog((i + 1) / total, f"{i + 1}/{total}")
             continue
         _key, label, requiere, fn = PASOS_POR_KEY[key]
+        # El progreso se avisa ANTES de correr el paso: es el unico momento en el
+        # que se puede mostrar en que se esta trabajando mientras tarda.
+        _prog(i / total, f"{label} ({i + 1}/{total})")
         faltan = [r for r in requiere if r == "registros" and registros is None
                   or r != "registros" and (aux or {}).get(r) is None]
         if faltan:
             _log(f"{label}: se omite (falta capa: {', '.join(faltan)})", "warn")
+            _prog((i + 1) / total, f"{i + 1}/{total}")
             continue
         try:
             for col, serie in fn(ctx).items():
@@ -425,5 +491,7 @@ def correr(colectores_gdf, registros=None, aux=None, config=None, clave=None,
             _log(f"{label}: OK", "ok")
         except Exception as e:  # noqa: BLE001
             _log(f"{label}: ERROR — {e}", "error")
+        _prog((i + 1) / total, f"{i + 1}/{total}")
 
+    _prog(1.0, "Listo")
     return ctx.resultados
