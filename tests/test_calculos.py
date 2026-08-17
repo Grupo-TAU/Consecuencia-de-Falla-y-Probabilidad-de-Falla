@@ -193,6 +193,60 @@ class TestProfundidad(unittest.TestCase):
             profundidad.calcular(self.col, self._registros())
         self.assertIn("Cota Zampeado", str(e.exception))
 
+    def test_sin_dato_cae_en_la_clase_supuesta(self):
+        """Un tramo sin profundidad conocida toma CLASE_SIN_DATO (2 por defecto),
+        no la clase 1 que le daria un 0 tomado como profundidad real."""
+        from cf_pf_core.calculos import profundidad
+        r = self._registros(Profundidad_Inspeccionada=[None, None, None])
+        self.assertEqual(list(profundidad.calcular(self.col, r)), [2, 2])
+
+    def test_la_clase_supuesta_es_configurable(self):
+        from cf_pf_core.calculos import profundidad
+        r = self._registros(Profundidad_Inspeccionada=[None, None, None])
+        self.assertEqual(
+            list(profundidad.calcular(self.col, r, clase_sin_dato=4)), [4, 4])
+        # None deja el NULL de antes, para quien lo prefiera.
+        serie = profundidad.calcular(self.col, r, clase_sin_dato=None)
+        self.assertTrue(serie.isna().all())
+
+    def test_un_cero_sigue_siendo_una_profundidad_real(self):
+        """Si el 0 llega igual desde otra fuente, se clasifica como 0 m (clase 1).
+        Evitar que la preparacion lo invente es tarea de cota_zampeado."""
+        from cf_pf_core.calculos import profundidad
+        r = self._registros(Profundidad_Inspeccionada=[0.0, 0.0, 0.0])
+        self.assertEqual(list(profundidad.calcular(self.col, r)), [1, 1])
+
+
+class TestPreparacionProfundidad(unittest.TestCase):
+    """La preparacion deduce profundidad = cota de tapa - zampeado, y NO inventa
+    ceros cuando el dato no sirve."""
+
+    def test_calculo_normal(self):
+        from cf_pf_core.preparacion.cota_zampeado import _profundidad
+        self.assertEqual(_profundidad(12.5, 8.0), 4.5)
+        self.assertEqual(_profundidad(3.27, 2.97), 0.3)
+
+    def test_cotas_en_cero_dan_none(self):
+        """El 0 es la forma habitual de anotar 'sin dato' en estas capas."""
+        from cf_pf_core.preparacion.cota_zampeado import _profundidad
+        self.assertIsNone(_profundidad(0.0, 8.0))
+        self.assertIsNone(_profundidad(12.5, 0.0))
+
+    def test_faltantes_dan_none(self):
+        from cf_pf_core.preparacion.cota_zampeado import _profundidad
+        self.assertIsNone(_profundidad(None, 8.0))
+        self.assertIsNone(_profundidad(12.5, None))
+
+    def test_negativa_da_none(self):
+        """Tapa por debajo del zampeado: error de carga o cotas de otro sistema."""
+        from cf_pf_core.preparacion.cota_zampeado import _profundidad
+        self.assertIsNone(_profundidad(8.0, 12.5))
+
+    def test_cero_legitimo_se_conserva(self):
+        """Tapa y zampeado iguales (y distintos de 0) es profundidad 0 de verdad."""
+        from cf_pf_core.preparacion.cota_zampeado import _profundidad
+        self.assertEqual(_profundidad(5.0, 5.0), 0.0)
+
 
 class TestProximidad(unittest.TestCase):
     """Rangos medioambientales '25=6; 50=5; 100=4; 200=3; 400=2'."""

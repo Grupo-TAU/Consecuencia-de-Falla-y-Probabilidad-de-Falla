@@ -21,6 +21,24 @@ CAMPO_ZARRIBA_DEFAULT = "ZARRIBA"
 CAMPO_REG_INI_DEFAULT = "Registro_Inicial"
 
 
+def _profundidad(cota_tapa, zampeado):
+    """cota de tapa - zampeado, o None si el dato no sirve.
+
+    Devuelve None —y NO 0— cuando alguna cota falta, viene en 0 (la forma
+    habitual de anotar 'sin dato' en estas capas) o el resultado da negativo
+    (tapa por debajo del zampeado: error de carga o cotas en sistemas distintos).
+
+    Escribir 0 seria peor que no escribir nada: 0 no se lee como 'no sé' sino
+    como una profundidad real, y cae en la clase menos critica de CF_Profundidad.
+    """
+    if cota_tapa is None or zampeado is None:
+        return None
+    if cota_tapa == 0 or zampeado == 0:
+        return None
+    prof = round(cota_tapa - zampeado, 2)
+    return prof if prof >= 0 else None
+
+
 def ejecutar(gpkg_col, gpkg_reg, layer_col=None, layer_reg=None,
              campo_cota_zamp=CAMPO_COTA_ZAMP_DEFAULT,
              campo_cota_tapa=CAMPO_COTA_TAPA_DEFAULT,
@@ -70,6 +88,7 @@ def ejecutar(gpkg_col, gpkg_reg, layer_col=None, layer_reg=None,
 
         fids_mec1 = set()
         actualizados_mec2 = 0
+        sin_profundidad = 0  # cota de tapa faltante, en 0, o profundidad negativa
 
         with ge.sin_triggers(con_reg, tabla_reg):
             # ── Mecanica 1: Cota_Tapa - Profundidad ───────────────────────────
@@ -126,20 +145,41 @@ def ejecutar(gpkg_col, gpkg_reg, layer_col=None, layer_reg=None,
                     fid = id_a_fid.get(clave)
                     if fid is None or fid in fids_mec1:
                         continue
-                    _rid, tapa, zamp, _prof = filas[fid]
-                    if not ge.es_vacio(zamp):
+                    _rid, tapa, zamp, prof_actual = filas[fid]
+                    # Dos salidas independientes: la cota de zampeado y la
+                    # profundidad. Cada una se completa solo si esta vacia. Antes
+                    # habia un unico `continue` sobre la cota, y eso dejaba la
+                    # profundidad sin escribir para siempre en las capas que ya
+                    # traian la cota cargada de un trabajo anterior.
+                    falta_zamp = ge.es_vacio(zamp)
+                    falta_prof = ge.es_vacio(prof_actual)
+                    if not falta_zamp and not falta_prof:
                         continue
-                    con_reg.execute(
-                        f'UPDATE "{tabla_reg}" SET "{c_zamp}"=? WHERE fid=?', (zarr, fid))
-                    cota_tapa = ge.a_float(tapa)
-                    if cota_tapa is not None:
-                        prof_calc = 0.0 if (cota_tapa == 0 or zarr == 0) \
-                            else round(cota_tapa - zarr, 2)
+
+                    if falta_zamp:
                         con_reg.execute(
-                            f'UPDATE "{tabla_reg}" SET "{c_prof_out}"=? WHERE fid=?',
-                            (prof_calc, fid))
+                            f'UPDATE "{tabla_reg}" SET "{c_zamp}"=? WHERE fid=?',
+                            (zarr, fid))
+
+                    if falta_prof:
+                        # La profundidad se mide contra la cota de zampeado que
+                        # vale para este registro: la que ya tenia, o ZARRIBA si
+                        # la acabamos de escribir.
+                        zamp_uso = zarr if falta_zamp else ge.a_float(zamp)
+                        prof_calc = _profundidad(ge.a_float(tapa), zamp_uso)
+                        if prof_calc is not None:
+                            con_reg.execute(
+                                f'UPDATE "{tabla_reg}" SET "{c_prof_out}"=? WHERE fid=?',
+                                (prof_calc, fid))
+                        else:
+                            sin_profundidad += 1
                     actualizados_mec2 += 1
                 _log(f"Mecanica 2: {actualizados_mec2} registros actualizados.")
+                if sin_profundidad:
+                    _log(f"{sin_profundidad} registros quedaron SIN profundidad "
+                         "(cota de tapa vacía, en 0, o menor que el zampeado). "
+                         "Se dejan nulos a propósito: un 0 se leería como un "
+                         "tramo superficial.", "warn")
 
         con_reg.commit()
     finally:

@@ -37,6 +37,31 @@ def asegurar_core():
 
 asegurar_core()
 
+
+def _verificar_dependencias():
+    """Falla con un mensaje entendible si al Python de QGIS le falta geopandas.
+
+    Todo el core es geopandas puro. Las instalaciones recientes de QGIS lo traen,
+    pero las viejas no, y ahi el plugin instala bien y despues revienta con un
+    ImportError que no dice que hacer. Mejor decirlo de una.
+    """
+    faltan = []
+    for modulo in ("geopandas", "shapely", "pandas"):
+        try:
+            __import__(modulo)
+        except ImportError:
+            faltan.append(modulo)
+    if faltan:
+        raise ImportError(
+            "Al Python de QGIS le falta: " + ", ".join(faltan) + ". "
+            "Este plugin los necesita. Instalalos desde el instalador de OSGeo4W "
+            "(paquete python3-geopandas) o actualiza QGIS a una version que los "
+            "incluya."
+        )
+
+
+_verificar_dependencias()
+
 import geopandas as gpd  # noqa: E402
 import pandas as pd  # noqa: E402
 from shapely import wkb as _wkb  # noqa: E402

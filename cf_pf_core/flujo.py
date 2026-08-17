@@ -105,6 +105,17 @@ def paso_posicion_relativa(ctx):
     return {"posicionRelativa": df["posicionRelativa"], "CF_PosicionRelativa": df["CF_PosicionRelativa"]}
 
 
+def _entero_o_none(v):
+    """La config llega como texto desde la app y el plugin. Vacio -> None, que
+    para 'clase si no se conoce la profundidad' significa dejarla NULL."""
+    if v is None or (isinstance(v, str) and not v.strip()):
+        return None
+    try:
+        return int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        return None
+
+
 def paso_profundidad(ctx):
     return {"CF_Profundidad": profundidad.calcular(
         ctx.colectores, ctx.registros,
@@ -113,7 +124,9 @@ def paso_profundidad(ctx):
         campo_id_reg=ctx.cfg("id_reg_campo", profundidad.CAMPO_ID_REG_DEFAULT),
         campo_prof=ctx.cfg("profundidad_campo", profundidad.CAMPO_PROF_DEFAULT),
         campo_prof_inspec=ctx.cfg("profundidad_inspec_campo", profundidad.CAMPO_PROF_INSPEC_DEFAULT),
-        rango=ctx.cfg("profundidad_rango", profundidad.RANGO_DEFAULT))}
+        rango=ctx.cfg("profundidad_rango", profundidad.RANGO_DEFAULT),
+        clase_sin_dato=_entero_o_none(
+            ctx.cfg("profundidad_clase_sin_dato", profundidad.CLASE_SIN_DATO_DEFAULT)))}
 
 
 def paso_ubicacion(ctx):
@@ -284,6 +297,8 @@ CONFIG_CAMPOS = {
         ("profundidad_campo", "Columna Profundidad (Registros)", profundidad.CAMPO_PROF_DEFAULT),
         ("profundidad_inspec_campo", "Columna Prof. Inspeccionada", profundidad.CAMPO_PROF_INSPEC_DEFAULT),
         ("profundidad_rango", "Rangos", profundidad.RANGO_DEFAULT),
+        ("profundidad_clase_sin_dato", "Clase si no se conoce la profundidad",
+         profundidad.CLASE_SIN_DATO_DEFAULT),
     ],
     "ubicacion": [
         ("ubicacion_campo_tipo", "Columna TIPO (Vías)", ubicacion.CAMPO_TIPO_DEFAULT),

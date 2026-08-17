@@ -17,6 +17,11 @@ CAMPO_PROF_DEFAULT = "PROFUNDIDAD"
 CAMPO_PROF_INSPEC_DEFAULT = "Profundidad_Inspeccionada"
 RANGO_DEFAULT = "1.5=1; 2.5=2; 3.5=3; 4.5=4; 6=5"
 
+# Clase que se asigna a un tramo del que no se conoce la profundidad. Es un
+# SUPUESTO explicito, no un dato: 2 corresponde al tramo de 1,5 a 2,5 m, la
+# profundidad tipica de un colector domiciliario. Poner None para dejarlo NULL.
+CLASE_SIN_DATO_DEFAULT = 2
+
 
 def _to_float(v):
     if v is None or (isinstance(v, float) and pd.isna(v)):
@@ -54,9 +59,9 @@ def parse_rango(texto):
     return sorted(limites, key=lambda x: x[0]) if limites else []
 
 
-def _clasificar(prof, limites):
+def _clasificar(prof, limites, clase_sin_dato=CLASE_SIN_DATO_DEFAULT):
     if prof is None:
-        return None
+        return clase_sin_dato
     for lim, cls in limites:
         if prof < lim:
             return cls
@@ -80,6 +85,7 @@ def calcular(
     campo_prof=CAMPO_PROF_DEFAULT,
     campo_prof_inspec=CAMPO_PROF_INSPEC_DEFAULT,
     rango=RANGO_DEFAULT,
+    clase_sin_dato=CLASE_SIN_DATO_DEFAULT,
 ):
     """Devuelve una Serie (indexada como colectores_gdf) con CF_Profundidad (NA sin dato)."""
     c_ini = _col(colectores_gdf, campo_reg_ini)
@@ -126,7 +132,7 @@ def calcular(
             prof_max = p_fin
         else:
             prof_max = None
-        return _clasificar(prof_max, limites)
+        return _clasificar(prof_max, limites, clase_sin_dato)
 
     valores = [_cf(ini, fin) for ini, fin in zip(colectores_gdf[c_ini], colectores_gdf[c_fin])]
     return pd.Series(valores, index=colectores_gdf.index, dtype="Int64")
