@@ -205,3 +205,100 @@ class TestVisualizador(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSelectorDeVariable(unittest.TestCase):
+    """El visualizador deja elegir que variable colorea el mapa."""
+
+    def _html(self, **extra):
+        from cf_pf_core import visualizador
+        from cf_pf_core.calculos import criticidad as C
+        datos = {p: [1, 4, 6] for p in C.PARAMS_DISPONIBLES}
+        datos["ELEMRED"] = [1, 2, 3]
+        datos.update(extra)
+        gdf = gpd.GeoDataFrame(datos, geometry=lineas(3), crs=CRS)
+        destino = os.path.join(tempfile.mkdtemp(), "sel.html")
+        visualizador.generar_html(gdf, destino)
+        with open(destino, encoding="utf-8") as fh:
+            return fh.read()
+
+    def _opciones(self, html):
+        import json
+        i = html.index('"options"')
+        return json.JSONDecoder().raw_decode(html[i + 10:].lstrip())[0]
+
+    def test_ofrece_todas_las_variables_presentes(self):
+        html = self._html(PF=[2.0, 3.0, 0.0], Riesgo=[2.8, 9.0, 6.0],
+                          Dist_Prox_MedioAmbiental=[673.7, 12.5, 250.0])
+        cols = [c for c, _e in self._opciones(html)]
+        self.assertIn("criticidad", cols)
+        self.assertIn("PF", cols)
+        self.assertIn("Riesgo", cols)
+        self.assertIn("Dist_Prox_MedioAmbiental", cols)
+        for p in ("CF_Diametro", "CF_Material", "CF_Obstrucciones"):
+            self.assertIn(p, cols)
+
+    def test_no_ofrece_lo_que_no_esta(self):
+        cols = [c for c, _e in self._opciones(self._html())]
+        self.assertNotIn("Riesgo", cols)
+        self.assertNotIn("Dist_Prox_MedioAmbiental", cols)
+
+    def test_arranca_en_criticidad(self):
+        self.assertIn('"value":"criticidad"', self._html().replace(" ", ""))
+
+    def test_las_etiquetas_son_legibles(self):
+        html = self._html(PF=[2.0, 3.0, 0.0])
+        etiquetas = dict(self._opciones(html))
+        self.assertEqual(etiquetas["criticidad"], "Consecuencia ajustada")
+        self.assertEqual(etiquetas["PF"], "Falla general")
+        self.assertEqual(etiquetas["CF_Diametro"], "Sección")
+
+    def _vista(self, col, valores=(1, 900)):
+        from cf_pf_core import visualizador as V
+        from cf_pf_core.calculos import criticidad as C
+        paleta = [c for _lim, c, _e in C.CLASES_COLOR]
+        return V._vista_de(col, list(valores), "criticidad", 6, paleta)
+
+    def test_la_familia_cf_comparte_la_escala(self):
+        for col in ("criticidad", "CF_Diametro", "PF"):
+            self.assertEqual(self._vista(col)["cortes"], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+        self.assertEqual(self._vista("Riesgo")["cortes"],
+                         [6.0, 12.0, 18.0, 24.0, 30.0, 36.0])
+
+    def test_las_distancias_usan_los_cortes_de_la_clasificacion(self):
+        """Repartir 0..maximo en partes iguales amontona el 95 % de los tramos en
+        el primer color: unos pocos outliers lejanos estiran la escala."""
+        v = self._vista("Dist_Prox_SitiosInteres")
+        self.assertEqual(v["cortes"][:5], [50.0, 100.0, 200.0, 400.0, 800.0])
+        self.assertEqual(v["etiquetas"][0], "0–50")
+        self.assertEqual(v["etiquetas"][-1], "> 800")
+
+        v = self._vista("Dist_Prox_MedioAmbiental")
+        self.assertEqual(v["cortes"][:5], [25.0, 50.0, 100.0, 200.0, 400.0])
+
+    def test_en_las_distancias_mas_cerca_es_peor(self):
+        """Un colector pegado a un curso de agua tiene que salir rojo, no verde."""
+        from cf_pf_core.calculos import criticidad as C
+        rojo = C.CLASES_COLOR[-1][1]
+        verde = C.CLASES_COLOR[0][1]
+
+        dist = self._vista("Dist_Prox_MedioAmbiental")
+        self.assertTrue(dist["invertir"])
+        self.assertEqual(dist["colores"][0], rojo, "el bin mas cercano va en rojo")
+        self.assertEqual(dist["colores"][-1], verde, "el mas lejano en verde")
+
+        crit = self._vista("criticidad")
+        self.assertFalse(crit["invertir"])
+        self.assertEqual(crit["colores"][0], verde)
+        self.assertEqual(crit["colores"][-1], rojo)
+
+    def test_pf_cero_es_sin_dato(self):
+        self.assertTrue(self._vista("PF")["cero_sin_dato"])
+        self.assertFalse(self._vista("criticidad")["cero_sin_dato"])
+
+    def test_los_bins_cubren_toda_la_variable(self):
+        for col in ("criticidad", "Riesgo", "Dist_Prox_SitiosInteres"):
+            v = self._vista(col)
+            self.assertEqual(len(v["cortes"]), 6)
+            self.assertEqual(len(v["etiquetas"]), 6)
+            self.assertEqual(len(v["colores"]), 6)

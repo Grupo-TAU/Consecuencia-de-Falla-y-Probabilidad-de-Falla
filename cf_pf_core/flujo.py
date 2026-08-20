@@ -19,6 +19,7 @@ import geopandas as gpd
 from cf_pf_core.claves import normalizar as normalizar_clave
 from cf_pf_core.calculos import (
     acceso_mantenimiento,
+    arboles,
     antiguedad,
     criticidad,
     diametro,
@@ -176,6 +177,15 @@ def paso_acceso(ctx):
     )}
 
 
+def paso_arboles(ctx):
+    return {"CF_Arboles": arboles.calcular(
+        ctx.colectores,
+        campo_nro=ctx.cfg("arboles_campo_nro", arboles.CAMPO_NRO_DEFAULT),
+        campo_dist=ctx.cfg("arboles_campo_dist", arboles.CAMPO_DIST_DEFAULT),
+        clase_con=int(ctx.cfg("arboles_clase_con", arboles.CLASE_CON_DEFAULT)),
+        clase_sin=int(ctx.cfg("arboles_clase_sin", arboles.CLASE_SIN_DEFAULT)))}
+
+
 def paso_pf(ctx):
     return {"PF": probabilidad_falla.calcular(ctx.colectores,
                                               campo_pacp=ctx.cfg("pf_campo_pacp", None))}
@@ -218,6 +228,7 @@ PASOS = [
     ("acceso", "CF Acceso Mantenimiento", ["registros"], paso_acceso),
     ("ubicacion", "CF Ubicación de la Tubería", ["vias"], paso_ubicacion),
     ("obstrucciones", "CF Obstrucciones", [], paso_obstrucciones),
+    ("arboles", "CF Árboles", [], paso_arboles),
     ("pf", "PF Probabilidad de Falla", [], paso_pf),
     ("criticidad", "Criticidad", [], paso_criticidad),
     ("riesgo", "Riesgo", [], paso_riesgo),
@@ -239,6 +250,7 @@ COLUMNAS_POR_PASO = {
     "acceso": ["CF_Acceso_Mantenimiento"],
     "ubicacion": ["CF_Ubicacion"],
     "obstrucciones": ["CF_Obstrucciones"],
+    "arboles": ["CF_Arboles"],
     "pf": ["PF"],
     "criticidad": ["criticidad"],
     "riesgo": ["Riesgo"],
@@ -321,6 +333,16 @@ CONFIG_CAMPOS = {
     ],
     "pf": [
         ("pf_campo_pacp", "Columna PACP (vacío = autodetecta)", ""),
+    ],
+    "arboles": [
+        ("arboles_campo_nro", "Columna cantidad de árboles",
+         arboles.CAMPO_NRO_DEFAULT),
+        ("arboles_campo_dist", "Columna distancia al árbol",
+         arboles.CAMPO_DIST_DEFAULT),
+        ("arboles_clase_con", "Clase si tiene al menos un árbol",
+         arboles.CLASE_CON_DEFAULT),
+        ("arboles_clase_sin", "Clase si no tiene ninguno",
+         arboles.CLASE_SIN_DEFAULT),
     ],
     "criticidad": [
         ("criticidad_campo", "Columna de salida", criticidad.CAMPO_SALIDA_DEFAULT),

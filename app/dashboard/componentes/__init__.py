@@ -1,0 +1,1 @@
+"""Componentes reutilizables del tablero."""

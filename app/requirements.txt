@@ -1,12 +1,37 @@
-# Dependencias de la app (app/streamlit_app.py) y del core (cf_pf_core).
+# Dependencias de la app (app/streamlit_app.py), del tablero Bokeh
+# (app/dashboard) y del core (cf_pf_core).
+#
 # Instalar con:  pip install -r app/requirements.txt
 #
 # Requiere Python 3.10+ (probado en 3.14). geopandas trae shapely, pyproj y
 # pyogrio (motor de lectura/escritura de GeoPackage).
 
+# ── Core y app Streamlit ─────────────────────────────────────────────────────
 streamlit>=1.60
 geopandas>=1.1
 shapely>=2.0
 pyogrio>=0.9
 matplotlib>=3.8
 bokeh>=3.5
+
+# ── Tablero de análisis (app/dashboard) ──────────────────────────────────────
+# scipy      Spearman (diagnóstico) y el backend de libpysal.
+# sklearn    PCA del tab de Diagnóstico.
+# libpysal   matriz de vecindad (KNN) para el LISA.
+# esda       Moran's I global y local.
+# pyarrow    caché en parquet de scripts/precompute.py.
+scipy>=1.11
+scikit-learn>=1.3
+libpysal>=4.9
+esda>=2.5
+pyarrow>=14.0
+
+# NO se necesita un solver MILP (PuLP / OR-Tools). El knapsack del tab de
+# Priorización se resuelve con greedy por ratio + intercambios, y la relajación
+# fraccionaria da una cota superior EXACTA del óptimo en forma cerrada: sobre los
+# datos reales el gap medido es 0,000 %. Un MILP sobre 60.000 binarias tardaría
+# minutos u horas para cerrar un gap que ya sabemos nulo. Ver
+# cf_pf_core/analisis/optimizacion.py.
+
+# ── Tests ───────────────────────────────────────────────────────────────────
+pytest>=7.0

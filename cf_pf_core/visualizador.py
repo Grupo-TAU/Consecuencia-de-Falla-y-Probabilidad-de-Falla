@@ -21,12 +21,14 @@ from bokeh.models import (
     FixedTicker,
     HoverTool,
     LinearColorMapper,
+    Select,
     Slider,
 )
 from bokeh.plotting import figure
 from bokeh.resources import CDN
 
 from cf_pf_core.calculos import criticidad as _crit
+from cf_pf_core.calculos import proximidad as _prox
 from cf_pf_core.claves import normalizar as normalizar_clave
 
 
@@ -59,11 +61,23 @@ ETIQUETAS_CF = {
     "CF_Antiguedad": ("Antigüedad", "Antiguedad"),
     "CF_Material": ("Material", "Material"),
     "CF_Obstrucciones": ("Obstrucciones", "Obstrucciones"),
+    "CF_Arboles": ("Árboles a 5 m", "nro_arbol_5m"),
+}
+
+# Nombre legible de las variables del selector que no son CF_*.
+ETIQUETAS_VISTA = {
+    "criticidad": "Consecuencia ajustada",
+    "CF": "Consecuencia ajustada",
+    "PF": "Falla general",
+    "Riesgo": "Riesgo",
+    "Dist_Prox_MedioAmbiental": "Distancia a curso de agua (m)",
+    "Dist_Prox_SitiosInteres": "Distancia a sitio de interés (m)",
 }
 
 # Columnas sueltas que se muestran tal cual si estan presentes.
 ETIQUETAS_SUELTAS = [
     ("Longitud", "Longitud", "{0.000}"),
+    ("dist_arbol", "Distancia al árbol (m)", "{0.0}"),
     ("PF", "Falla general", "{0.00}"),
     ("Riesgo", "Riesgo", "{0.00}"),
 ]
@@ -135,6 +149,75 @@ def adjuntar_crudos(resultados_gdf, colectores_gdf, clave=None):
                             crs=resultados_gdf.crs)
 
 
+def _fmt_num(x):
+    if x == float("inf"):
+        return "∞"
+    return f"{x:,.0f}".replace(",", ".") if abs(x - round(x)) < 1e-9 else f"{x:.1f}"
+
+
+def _etiquetas_bins(cortes):
+    """'0–25', '25–50', ..., '> 400' a partir de los limites superiores."""
+    salida, previo = [], 0.0
+    for c in cortes:
+        salida.append(f"> {_fmt_num(previo)}" if c == float("inf")
+                      else f"{_fmt_num(previo)}–{_fmt_num(c)}")
+        previo = c
+    return salida
+
+
+def _vista_de(columna, valores, campo_crit, n_clases, paleta):
+    """Como se dibuja una variable: cortes, etiquetas, colores y sentido.
+
+    Los cortes NO son tramos iguales: son los limites que ya definen el
+    significado de cada variable. Para las distancias son los mismos rangos con
+    los que se calculo el CF, porque repartir 0..maximo en seis partes iguales
+    amontona el 95 % de los tramos en el primer color (un par de outliers a 4 km
+    estiran la escala y el mapa queda de un solo tono).
+
+    'invertir' existe porque en las distancias MENOS es PEOR: un colector pegado
+    a un curso de agua tiene que salir rojo, no verde.
+    """
+    col = columna.lower()
+    if columna == campo_crit or columna.startswith("CF_") or col == "pf":
+        cortes = [float(b) for b, _, _ in _crit.CLASES_COLOR]
+        invertir = False
+    elif col == "riesgo":
+        cortes = [6.0, 12.0, 18.0, 24.0, 30.0, 36.0]
+        invertir = False
+    elif col.startswith("dist_"):
+        rango = (_prox.RANGOS_MEDIOAMBIENTAL_DEFAULT if "medioamb" in col
+                 else _prox.RANGOS_SITIOS_DEFAULT)
+        limites = [d for d, _c in _prox.parse_rangos(rango)]
+        cortes = limites[:n_clases - 1] + [float("inf")]
+        invertir = True
+    else:
+        numeros = [v for v in valores if isinstance(v, (int, float)) and v == v]
+        alto = float(max(max(numeros, default=1.0), 1.0))
+        paso = alto / n_clases
+        cortes = [paso * (i + 1) for i in range(n_clases)]
+        invertir = False
+
+    while len(cortes) < n_clases:
+        cortes.append(float("inf"))
+    cortes = cortes[:n_clases]
+
+    # Colores en el orden NATURAL de la variable (primer bin primero). Al invertir,
+    # el bin mas cercano se lleva el rojo.
+    colores = list(reversed(paleta)) if invertir else list(paleta)
+    # Etiquetas del ColorBar: la barra siempre va de verde (0) a rojo (n).
+    bordes = [0.0] + list(cortes)
+    if invertir:
+        bordes = list(reversed(bordes))
+    return {
+        "cortes": cortes,
+        "invertir": invertir,
+        "etiquetas": _etiquetas_bins(cortes),
+        "colores": colores,
+        "barra": {str(i): _fmt_num(b) for i, b in enumerate(bordes)},
+        "cero_sin_dato": col == "pf",
+    }
+
+
 def _clase(valor, n_clases):
     """Indice de clase de un valor de criticidad, 0..n_clases-1.
 
@@ -181,13 +264,18 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     """
     grupos = grupos if grupos is not None else _crit.GRUPOS_DEFAULT
 
-    # Columnas CF que participan (resueltas contra las presentes).
-    mapa, faltantes = _crit.resolver_columnas(resultados_gdf.columns, grupos)
+    # Columnas CF que participan. Solo se exigen las de los grupos CON peso: un
+    # grupo en 0 no mueve la criticidad, asi que su columna es opcional.
+    _mapa_activos, faltantes = _crit.resolver_columnas(resultados_gdf.columns, grupos)
     if faltantes:
         raise KeyError(
             f"Faltan columnas para el visualizador: {faltantes}. "
             "Corré el flujo de CdeF primero."
         )
+    # Para mostrar se resuelven TODOS los grupos, aunque hoy esten en 0: asi el
+    # slider aparece igual y el usuario puede subirle el peso desde el HTML.
+    mapa, _ = _crit.resolver_columnas(resultados_gdf.columns, grupos,
+                                      solo_activos=False)
     params = sorted(mapa.keys())
 
     # A Web Mercator para el fondo de tiles.
@@ -249,7 +337,17 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
                 v = fila[c]
                 datos_extra[c].append("" if v is None or v != v else v)
 
+    # Nombre con el que la criticidad viaja en el source. La capa puede traerla
+    # como 'CF' (ver flujo.campo_criticidad), pero aca adentro se maneja siempre
+    # con un nombre fijo: lo que cambia afuera es la columna del .gpkg.
+    campo_crit_col = "criticidad"
+
+    # 'valor' es la columna que colorea el mapa. Arranca igual que criticidad y
+    # el selector la reemplaza por la variable que se elija; asi el renderer no
+    # tiene que cambiar de campo, que en Bokeh no se puede hacer en vivo.
     source = ColumnDataSource(data={"xs": xs, "ys": ys, "criticidad": crit_ini,
+                                    "valor": [min(5.0, max(0.0, float(int(c)))) + 0.5
+                                              for c in crit_ini],
                                     "primero": primero, **datos_param,
                                     **datos_extra})
 
@@ -257,7 +355,12 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     # abajo, rojo arriba. low=0/high=6 con 6 colores parte en tramos de 1, o sea
     # los mismos cortes que las reglas '"Criticidad" > N AND <= N+1' del plugin.
     paleta = [color for _, color, _ in _crit.CLASES_COLOR]
-    mapper = LinearColorMapper(palette=paleta, low=0.0, high=6.0)
+    # El mapper trabaja siempre sobre el INDICE de clase (0..n), no sobre el valor
+    # crudo: asi cada variable puede tener sus propios cortes —que no son tramos
+    # iguales— y hasta invertir el sentido, sin tocar el renderer.
+    mapper = LinearColorMapper(palette=paleta, low=0.0,
+                               high=float(len(_crit.CLASES_COLOR)),
+                               nan_color="#BBBBBB")
 
     p = figure(
         title=titulo, x_axis_type="mercator", y_axis_type="mercator",
@@ -267,7 +370,7 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     p.add_tile("CartoDB Positron")
     lineas = p.multi_line(
         xs="xs", ys="ys", source=source,
-        line_color={"field": "criticidad", "transform": mapper},
+        line_color={"field": "valor", "transform": mapper},
         line_width=3, line_alpha=0.9,
     )
     # Tooltip: clave, cada CF con su crudo entre parentesis, las sueltas y la
@@ -297,14 +400,14 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     p.add_tools(HoverTool(renderers=[lineas], tooltips=tooltips))
     # Marcas en los cortes de clase (0..6), para que la barra se lea como la
     # leyenda de QGIS y no como un degradado continuo.
-    p.add_layout(
-        ColorBar(
-            color_mapper=mapper,
-            title="Criticidad",
-            ticker=FixedTicker(ticks=[b for b, _, _ in _crit.CLASES_COLOR] + [0]),
-        ),
-        "right",
+    barra = ColorBar(
+        color_mapper=mapper,
+        title="Criticidad",
+        ticker=FixedTicker(ticks=list(range(len(_crit.CLASES_COLOR) + 1))),
+        major_label_overrides={str(b): str(b) for b in
+                               range(len(_crit.CLASES_COLOR) + 1)},
     )
+    p.add_layout(barra, "right")
 
     # ── Panel de analisis: distribucion por clase + estadisticos ──────────────
     # Las clases y los colores son los mismos de la simbologia, asi la barra del
@@ -354,7 +457,7 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
         ps = [p_ for p_ in g["params"] if p_ in mapa]
         if not ps:
             continue
-        s = Slider(start=0.0, end=1.0, value=float(g["peso"]), step=0.05,
+        s = Slider(start=0.0, end=1.0, value=float(g["peso"]), step=0.01,
                    title=f"Peso · {nombre}", sizing_mode="stretch_width")
         sliders.append(s)
         grupos_js.append({"params": ps, "n": len(g["params"]), "peso_idx": len(sliders) - 1})
@@ -373,10 +476,38 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     suma = Div(text=_texto_suma(sum(s.value for s in sliders)),
                sizing_mode="stretch_width")
 
+    # ── Selector de variable ──────────────────────────────────────────────────
+    # Todas las columnas ya viajan en el source; lo unico que cambia al elegir
+    # otra variable es cual alimenta el color, el histograma y los estadisticos.
+    vistas = {}
+    opciones = []
+    candidatas = [campo_crit_col, *params]
+    candidatas += [c for c in ("PF", "Riesgo") if c in extras]
+    candidatas += [c for c in extras if c.startswith("Dist_")]
+    for col in dict.fromkeys(candidatas):
+        if col == campo_crit_col:
+            serie = crit_ini
+        elif col in datos_param:
+            serie = datos_param[col]
+        elif col in datos_extra:
+            serie = datos_extra[col]
+        else:
+            continue
+        etiqueta = ETIQUETAS_VISTA.get(col) or (
+            ETIQUETAS_CF.get(col, (col, None))[0] if col.startswith("CF_") else col)
+        vistas[col] = {**_vista_de(col, serie, campo_crit_col, n_clases, paleta),
+                       "titulo": etiqueta}
+        opciones.append((col, etiqueta))
+
+    selector = Select(title="Ver en el mapa", value=campo_crit_col,
+                      options=opciones, sizing_mode="stretch_width")
+
     callback = CustomJS(
         args={"source": source, "sliders": sliders, "escala": escala,
               "grupos": grupos_js, "hist": hist_source, "stats": stats,
-              "n_clases": n_clases, "suma": suma},
+              "n_clases": n_clases, "suma": suma, "selector": selector,
+              "vistas": vistas, "mapper": mapper, "barra": barra,
+              "hist_fig": hist, "campo_crit": campo_crit_col},
         code="""
         // Suma de pesos: en verde si da 100%, en rojo si no.
         let total_peso = 0;
@@ -389,7 +520,10 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
             (ok ? "" : " — la criticidad no queda en escala 1–6") + "</span></div>";
 
         const data = source.data;
-        const n = data['criticidad'].length;
+        const n = data[campo_crit].length;
+        // La criticidad se recalcula SIEMPRE, se este viendo o no: si el usuario
+        // mueve los pesos mirando otra variable y despues vuelve, tiene que
+        // encontrarla al dia.
         for (let i = 0; i < n; i++) {
             let total = 0.0;
             for (const g of grupos) {
@@ -397,9 +531,33 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
                 for (const p of g.params) { s += data[p][i]; }
                 total += sliders[g.peso_idx].value * (s / (g.n * escala));
             }
-            data['criticidad'][i] = Math.round(total * escala * 100) / 100;
+            data[campo_crit][i] = Math.round(total * escala * 100) / 100;
+        }
+
+        // La variable elegida pasa a 'valor', que es la que colorea el mapa.
+        // 'valor' no es el numero crudo sino el indice de clase: cada variable
+        // tiene sus propios cortes y las distancias van al reves (mas cerca, peor).
+        const campo = selector.value;
+        const vista = vistas[campo];
+        const clase_de = (v) => {
+            if (v === null || v === undefined || v !== v) return null;
+            if (vista.cero_sin_dato && v === 0) return null;   // PF 0 = sin inspeccion
+            let k = n_clases - 1;
+            for (let j = 0; j < vista.cortes.length; j++) {
+                if (v <= vista.cortes[j]) { k = j; break; }
+            }
+            return k;
+        };
+        for (let i = 0; i < n; i++) {
+            const k = clase_de(data[campo][i]);
+            data['valor'][i] = (k === null) ? null
+                : (vista.invertir ? (n_clases - 1 - k) : k) + 0.5;
         }
         source.change.emit();
+
+        barra.title = vista.titulo;
+        barra.major_label_overrides = vista.barra;
+        hist_fig.title.text = "Tramos por clase · " + vista.titulo;
 
         // Distribucion y estadisticos: solo las filas con primero=1, para contar
         // cada tramo una vez y no una vez por parte de su geometria.
@@ -407,14 +565,16 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
         const vals = [];
         for (let i = 0; i < n; i++) {
             if (!data['primero'][i]) continue;
-            const v = data['criticidad'][i];
-            vals.push(v);
-            let k = Math.floor(v);
-            if (k < 0) k = 0;
-            if (k > n_clases - 1) k = n_clases - 1;
-            cuentas[k] += 1;
+            const bruto = data[campo][i];
+            const k = clase_de(bruto);
+            if (k === null) continue;          // sin dato: fuera del histograma
+            vals.push(bruto);                  // los estadisticos van en la unidad real
+            cuentas[k] += 1;                   // el histograma, en orden natural
         }
+        hist_fig.x_range.factors = vista.etiquetas;
+        hist.data['clase'] = vista.etiquetas;
         hist.data['conteo'] = cuentas;
+        hist.data['color'] = vista.colores;
         hist.change.emit();
 
         vals.sort((a, b) => a - b);
@@ -437,6 +597,7 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
             fila("Máximo", maxi.toFixed(2)) + "</table>";
         """,
     )
+    selector.js_on_change("value", callback)
     for s in sliders:
         s.js_on_change("value", callback)
 
@@ -448,7 +609,7 @@ def generar_html(resultados_gdf, salida_html, grupos=None, titulo="Consecuencia 
     sep = Div(text="<hr style='border:none;border-top:1px solid #DDD;margin:8px 0'>"
                    "<b style='font-size:13px'>Análisis</b>",
               sizing_mode="stretch_width")
-    panel = column(encabezado, *sliders, suma, sep, stats, hist,
+    panel = column(encabezado, selector, *sliders, suma, sep, stats, hist,
                    width=340, sizing_mode="stretch_height")
     layout = row(panel, p, sizing_mode="stretch_both")
 

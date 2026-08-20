@@ -219,8 +219,12 @@ with tab_calc:
             grupos, total_peso = {}, 0.0
             for gname, gdef in _crit.GRUPOS_DEFAULT.items():
                 c1, c2 = st.columns([1, 3])
+                # Paso de 0.01: con 0.05 no se podian escribir repartos como
+                # 0.27 / 0.14 / 0.22, que es lo que sale al hacerle lugar a un
+                # grupo nuevo repartiendo proporcionalmente entre los demas.
                 peso = c1.number_input(f"Peso · {gname}", min_value=0.0, max_value=1.0,
-                                       value=float(gdef["peso"]), step=0.05, key=f"peso_{gname}")
+                                       value=float(gdef["peso"]), step=0.01,
+                                       format="%.2f", key=f"peso_{gname}")
                 params = c2.multiselect(f"Parámetros · {gname}", options=_crit.PARAMS_DISPONIBLES,
                                         default=gdef["params"], key=f"params_{gname}")
                 if params:

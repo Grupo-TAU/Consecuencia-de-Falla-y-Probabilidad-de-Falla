@@ -35,6 +35,14 @@ GRUPOS_DEFAULT = {
         "peso": 0.25,
         "params": ["CF_Antiguedad", "CF_Material", "CF_Obstrucciones"],
     },
+    # Arboles entra con peso 0: la columna se calcula y se puede ver, pero no
+    # mueve la criticidad hasta que alguien le asigne un porcentaje. Un grupo sin
+    # peso es INERTE —ni siquiera exige que su columna exista—, asi que esto no
+    # afecta a las capas que no tienen datos de arboles.
+    "Arboles": {
+        "peso": 0.0,
+        "params": ["CF_Arboles"],
+    },
 }
 
 # Nombres alternativos aceptados para algunas columnas.
@@ -61,8 +69,11 @@ CLASES_COLOR = [
 PARAMS_DISPONIBLES = [
     "CF_Diametro", "CF_Profundidad", "CF_Acceso_Mantenimiento", "CF_Ubicacion",
     "CF_PosicionRelativa", "CF_Prox_SitiosInteres", "CF_Prox_MedioAmbiental",
-    "CF_Antiguedad", "CF_Material", "CF_Obstrucciones",
+    "CF_Antiguedad", "CF_Material", "CF_Obstrucciones", "CF_Arboles",
 ]
+
+# CF_Arboles vive en el grupo "Arboles" con peso 0: presente y visible, pero sin
+# efecto sobre la criticidad hasta que se le de un porcentaje. Ver grupos_activos.
 
 
 def _cf(v):
@@ -83,10 +94,27 @@ def _resolver(columnas, nombre):
     return None
 
 
-def resolver_columnas(columnas, grupos):
-    """Devuelve (mapa param->columna_real, faltantes)."""
+def grupos_activos(grupos):
+    """Los grupos que efectivamente participan: con parametros y con peso.
+
+    Un grupo de peso 0 no aporta nada al puntaje, asi que tampoco tiene por que
+    exigir que sus columnas existan. Es lo que permite dejar un parametro listo
+    para usarse —CF_Arboles— sin romper las capas que no lo traen.
+    """
+    return {n: g for n, g in grupos.items() if g.get("params") and g.get("peso")}
+
+
+def resolver_columnas(columnas, grupos, solo_activos=True):
+    """Devuelve (mapa param->columna_real, faltantes).
+
+    Por defecto ignora los grupos sin peso. Con solo_activos=False se resuelven
+    todos, que es lo que necesita el visualizador para poder ofrecer el slider de
+    un grupo que hoy esta en 0 y el usuario quiera subir.
+    """
     mapa, faltantes = {}, []
     vistos = set()
+    if solo_activos:
+        grupos = grupos_activos(grupos)
     for g in grupos.values():
         for p in g["params"]:
             if p in vistos:
@@ -116,7 +144,7 @@ def calcular(df, grupos=None, escala=ESCALA):
 
     def _fila(row):
         total = 0.0
-        for g in grupos.values():
+        for g in grupos_activos(grupos).values():
             params = g["params"]
             if not params:
                 continue

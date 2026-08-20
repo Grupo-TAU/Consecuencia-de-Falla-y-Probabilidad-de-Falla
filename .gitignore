@@ -4,6 +4,9 @@ AnalisisDeDatos/salidas/
 # Empaquetado del plugin (scripts/deploy_plugin.py: copia de plugin + core)
 dist/
 
+# Cache del tablero (scripts/precompute.py lo regenera)
+cache/
+
 # Python
 __pycache__/
 *.pyc
